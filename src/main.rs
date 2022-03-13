@@ -262,7 +262,7 @@ async fn handle_ldk_events(
 			// println!("EVENT: PaymentPathFailed");
 			// println!("{:?}", payment_hash);
 			// println!("{:?}", payment_id);
-			// println!("rejected_by_dest {:?}", rejected_by_dest);
+			println!("rejected_by_dest {:?}", rejected_by_dest);
 			// println!("network_update {:?}", network_update);
 			// println!("all_paths_failed {:?}", all_paths_failed);
 			// println!("short_channel_id {:?}", short_channel_id);
@@ -271,7 +271,7 @@ async fn handle_ldk_events(
 			// println!("error_data {:?}", error_data);
 
 			println!("\x1b[93mFAILED PATH\x1b[0m");
-			// println!("path {:?}", path);
+			println!("path {:?}", path);
 			print_hops(path);
 
 			let state = our_payment_state.lock().unwrap();
@@ -282,7 +282,7 @@ async fn handle_ldk_events(
 
 				if let Some(original_path) = original_path {
 					print_hops(original_path.paths.first().unwrap());
-					// println!("original path {:?}", original_path.paths);
+					println!("original path {:?}", original_path.paths);
 
 					println!("\x1b[93mVERDICT\x1b[0m");
 					let original_len = original_path.paths.first().unwrap().len();
