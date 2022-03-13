@@ -61,8 +61,7 @@ probeprivate 02c10ef3fcde4f4b15d1edda68726908a4d2f7f6f7159b99747c35d77fbc2902e1 
 - [x] Detect difference (programatically) between when we use a real channel and not
 
 MAYBE
-- [ ] Iterate over multiple UTXOs and try them out with above
-- [ ] GOAL: Find invisible channels!
+- [ ] Iterate over a list of UTXOs and see if any are a private channel
 
 # ldk-sample
 Sample node implementation using LDK.
