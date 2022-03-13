@@ -493,6 +493,9 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						short_channel_id: channel_id.unwrap(),
 						channel_features: ChannelFeatures::known(),
 						fee_msat: 1000,
+						// This needs to be adjusted along way?
+						/// The CLTV delta added for this hop. For the last hop, this should be the full CLTV value
+						/// expected at the destination, in excess of the current block height.
 						cltv_expiry_delta: 40,
 					};
 
@@ -501,7 +504,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						let inner = route.paths.first_mut().unwrap();
 
 						inner.push(next_hop);
-						route.paths = vec![inner.to_owned()];
+						// route.paths = vec![inner.to_owned()];
 						route
 					} else {
 						println!("No route");

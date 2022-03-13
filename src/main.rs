@@ -240,6 +240,7 @@ async fn handle_ldk_events(
 		Event::PaymentPathFailed {
 			payment_hash,
 			payment_id,
+			// TODO why is rejected by dest always true?
 			rejected_by_dest,
 			network_update,
 			all_paths_failed,
