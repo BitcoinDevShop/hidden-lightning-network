@@ -1,4 +1,5 @@
 use crate::disk;
+use crate::disk::FilesystemLogger;
 use crate::hex_utils;
 use crate::Router;
 use crate::{
@@ -16,19 +17,21 @@ use lightning::routing::network_graph;
 use lightning::routing::network_graph::NetworkGraph;
 use lightning::routing::router::find_route;
 use lightning::routing::router::PaymentParameters;
+use lightning::routing::router::Route;
+use lightning::routing::router::RouteHop;
 use lightning::routing::router::RouteParameters;
+use lightning::routing::scoring::FixedPenaltyScorer;
 use lightning::routing::scoring::ProbabilisticScorer;
-use lightning::routing::scoring::Scorer;
 use lightning::util::config::{ChannelConfig, ChannelHandshakeLimits, UserConfig};
 use lightning::util::events::Event;
 use lightning::util::events::EventHandler;
 use lightning::util::logger::Logger;
-use lightning::util::test_utils::TestScorer;
 use lightning_invoice::payment::Payer;
 use lightning_invoice::payment::PaymentError;
 use lightning_invoice::{utils, Currency, Invoice};
 use std::cell::RefCell;
 use std::env;
+use std::fs::File;
 use std::io;
 use std::io::{BufRead, Write};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
@@ -157,7 +160,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 	channel_manager: Arc<ChannelManager>, keys_manager: Arc<KeysManager>,
 	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage,
 	ldk_data_dir: String, network: Network, network_graph: Arc<NetworkGraph>,
-	logger: Arc<dyn Logger>, scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
+	logger: Arc<FilesystemLogger>, scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
 ) {
 	println!("LDK startup successful. To view available commands: \"help\".");
 	println!("LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs");
@@ -375,8 +378,27 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					);
 				}
 				"findroutes" => {
-					println!("Finding route...");
-					find_routes(channel_manager, "", &network_graph, ldk_data_dir)
+					let pubkey_str = words.next();
+					if pubkey_str.is_none() {
+						println!("ERROR: findroutes requires a pubkey: `findroutes <pubkey>`");
+						continue;
+					}
+
+					// let invoice = match Invoice::from_str(invoice_str.unwrap()) {
+					// 	Ok(inv) => inv,
+					// 	Err(e) => {
+					// 		println!("ERROR: invalid invoice: {:?}", e);
+					// 		continue;
+					// 	}
+					// };
+					find_routes(
+						&invoice_payer,
+						channel_manager.clone(),
+						pubkey_str.unwrap(),
+						&network_graph,
+						&logger,
+						ldk_data_dir.clone(),
+					)
 				}
 				_ => println!("Unknown command. See `\"help\" for available commands."),
 			}
@@ -414,8 +436,7 @@ fn help() {
 // )
 fn find_routes<E: EventHandler>(
 	invoice_payer: &InvoicePayer<E>, channel_manager: Arc<ChannelManager>, payee_pubkey: &str,
-	network: &NetworkGraph, logger: &dyn Logger,
-	scorer: &Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>, ldk_data_dir: String,
+	network: &NetworkGraph, logger: &FilesystemLogger, ldk_data_dir: String,
 ) {
 	let our_node_pubkey = channel_manager.get_our_node_id();
 
@@ -432,13 +453,9 @@ fn find_routes<E: EventHandler>(
 		RouteParameters { payment_params, final_value_msat: 1000, final_cltv_expiry_delta: 40 };
 
 	let first_hops = channel_manager.first_hops();
-	// let first_hops = invoice_payer.payer.first_hops();
 
-	let scorer_path = format!("{}/prob_scorer", ldk_data_dir.clone());
-	let scorer =
-		Arc::new(Mutex::new(disk::read_scorer(Path::new(&scorer_path), Arc::new(network.clone()))));
-
-	let scorer = TestScorer::new();
+	// let scorer = TestScorer::new();
+	let scorer = FixedPenaltyScorer::with_penalty(1000);
 
 	let route = find_route(
 		&our_node_pubkey,
@@ -448,6 +465,23 @@ fn find_routes<E: EventHandler>(
 		logger,
 		&scorer,
 	);
+
+	if let Ok(route) = route {
+		// dbg!(route.paths);
+		send_fake_payment(route.paths)
+	} else {
+		println!("No route found")
+	}
+}
+
+// fn printRoute(route: Route) {
+// for path in route.clone().paths[0] {
+// 	println!("{:?}", path.pubkey)
+// }
+// }
+
+fn send_fake_payment(route: Vec<Vec<RouteHop>>) {
+	dbg!(route);
 }
 
 fn node_info(channel_manager: Arc<ChannelManager>, peer_manager: Arc<PeerManager>) {
