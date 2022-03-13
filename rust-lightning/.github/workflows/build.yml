@@ -1,0 +1,305 @@
+name: Continuous Integration Checks
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ ubuntu-latest ]
+        toolchain: [ stable,
+                     beta,
+                     # 1.36.0 is MSRV for Rust-Lightning, lightning-invoice, and lightning-persister
+                     1.36.0,
+                     # 1.41.0 is Debian stable
+                     1.41.0,
+                     # 1.45.2 is MSRV for lightning-net-tokio, lightning-block-sync, and coverage generation
+                     1.45.2,
+                     # 1.47.0 will be the MSRV for no-std builds using hashbrown once core2 is updated
+                     1.47.0]
+        include:
+          - toolchain: stable
+            build-net-tokio: true
+            build-no-std: true
+          - toolchain: stable
+            platform: macos-latest
+            build-net-tokio: true
+            build-no-std: true
+          - toolchain: beta
+            platform: macos-latest
+            build-net-tokio: true
+            build-no-std: true
+          - toolchain: stable
+            platform: windows-latest
+            build-net-tokio: true
+            build-no-std: true
+          - toolchain: beta
+            platform: windows-latest
+            build-net-tokio: true
+            build-no-std: true
+          - toolchain: beta
+            build-net-tokio: true
+            build-no-std: true
+          - toolchain: 1.36.0
+            build-no-std: false
+            test-log-variants: true
+          - toolchain: 1.41.0
+            build-no-std: false
+          - toolchain: 1.45.2
+            build-net-old-tokio: true
+            build-net-tokio: true
+            build-no-std: false
+            coverage: true
+          - toolchain: 1.47.0
+            build-no-std: true
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+      - name: Install Rust ${{ matrix.toolchain }} toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          override: true
+          profile: minimal
+      - name: Pin tokio to 1.14 for Rust 1.45
+        if: "matrix.build-net-old-tokio"
+        run: cargo update -p tokio --precise "1.14.0" --verbose
+      - name: Build on Rust ${{ matrix.toolchain }} with net-tokio
+        if: "matrix.build-net-tokio && !matrix.coverage"
+        run: cargo build --verbose --color always
+      - name: Build on Rust ${{ matrix.toolchain }} with net-tokio and full code-linking for coverage generation
+        if: matrix.coverage
+        run: RUSTFLAGS="-C link-dead-code" cargo build --verbose --color always
+      - name: Build on Rust ${{ matrix.toolchain }}
+        if: "! matrix.build-net-tokio"
+        run: |
+          cargo build --verbose  --color always -p lightning
+          cargo build --verbose  --color always -p lightning-invoice
+          cargo build --verbose  --color always -p lightning-persister
+      - name: Build on Rust ${{ matrix.toolchain }} with all Log-Limiting features
+        if: matrix.test-log-variants
+        run: |
+          cd lightning
+          for FEATURE in $(cat Cargo.toml | grep '^max_level_' | awk '{ print $1 }'); do
+            cargo build --verbose --color always --features $FEATURE
+          done
+      - name: Build Block Sync Clients on Rust ${{ matrix.toolchain }} with features
+        if: "matrix.build-net-tokio && !matrix.coverage"
+        run: |
+          cd lightning-block-sync
+          cargo build --verbose --color always --features rest-client
+          cargo build --verbose --color always --features rpc-client
+          cargo build --verbose --color always --features rpc-client,rest-client
+          cargo build --verbose --color always --features rpc-client,rest-client,tokio
+      - name: Build Block Sync Clients on Rust ${{ matrix.toolchain }} with features and full code-linking for coverage generation
+        if: matrix.coverage
+        run: |
+          cd lightning-block-sync
+          RUSTFLAGS="-C link-dead-code" cargo build --verbose --color always --features rest-client
+          RUSTFLAGS="-C link-dead-code" cargo build --verbose --color always --features rpc-client
+          RUSTFLAGS="-C link-dead-code" cargo build --verbose --color always --features rpc-client,rest-client
+          RUSTFLAGS="-C link-dead-code" cargo build --verbose --color always --features rpc-client,rest-client,tokio
+      - name: Test backtrace-debug builds on Rust ${{ matrix.toolchain }}
+        if: "matrix.build-no-std"
+        run: |
+          cd lightning && cargo test --verbose --color always --features backtrace
+      - name: Test on Rust ${{ matrix.toolchain }} with net-tokio
+        if: "matrix.build-net-tokio && !matrix.coverage"
+        run: cargo test --verbose --color always
+      - name: Test on Rust ${{ matrix.toolchain }} with net-tokio and full code-linking for coverage generation
+        if: matrix.coverage
+        run: RUSTFLAGS="-C link-dead-code" cargo test --verbose --color always
+      - name: Test on no-std bullds Rust ${{ matrix.toolchain }}
+        if: "matrix.build-no-std && !matrix.coverage"
+        shell: bash # Default on Winblows is powershell
+        run: |
+          cd lightning
+          cargo test --verbose --color always --no-default-features --features no-std
+          # check if there is a conflict between no-std and the default std feature
+          cargo test --verbose --color always --features no-std
+          # check if there is a conflict between no-std and the c_bindings cfg
+          RUSTFLAGS="--cfg=c_bindings" cargo test --verbose --color always --no-default-features --features=no-std
+          cd ..
+          cd lightning-invoice
+          cargo test --verbose --color always --no-default-features --features no-std
+          # check if there is a conflict between no-std and the default std feature
+          cargo test --verbose --color always --features no-std
+          cd ..
+      - name: Test on no-std builds Rust ${{ matrix.toolchain }} and full code-linking for coverage generation
+        if: "matrix.build-no-std && matrix.coverage"
+        run: |
+          cd lightning
+          RUSTFLAGS="-C link-dead-code" cargo test --verbose --color always --no-default-features --features no-std
+          cd ..
+      - name: Test on Rust ${{ matrix.toolchain }}
+        if: "! matrix.build-net-tokio"
+        run: |
+          cargo test --verbose --color always  -p lightning
+          cargo test --verbose --color always  -p lightning-invoice
+          cargo build --verbose  --color always -p lightning-persister
+          cargo build --verbose  --color always -p lightning-background-processor
+      - name: Test C Bindings Modifications on Rust ${{ matrix.toolchain }}
+        if: "! matrix.build-net-tokio"
+        run: |
+          RUSTFLAGS="--cfg=c_bindings" cargo test --verbose --color always  -p lightning
+          RUSTFLAGS="--cfg=c_bindings" cargo test --verbose --color always  -p lightning-invoice
+          RUSTFLAGS="--cfg=c_bindings" cargo build --verbose  --color always -p lightning-persister
+          RUSTFLAGS="--cfg=c_bindings" cargo build --verbose  --color always -p lightning-background-processor
+      - name: Test Block Sync Clients on Rust ${{ matrix.toolchain }} with features
+        if: "matrix.build-net-tokio && !matrix.coverage"
+        run: |
+          cd lightning-block-sync
+          cargo test --verbose --color always --features rest-client
+          cargo test --verbose --color always --features rpc-client
+          cargo test --verbose --color always --features rpc-client,rest-client
+          cargo test --verbose --color always --features rpc-client,rest-client,tokio
+      - name: Test Block Sync Clients on Rust ${{ matrix.toolchain }} with features and full code-linking for coverage generation
+        if: matrix.coverage
+        run: |
+          cd lightning-block-sync
+          RUSTFLAGS="-C link-dead-code" cargo test --verbose --color always --features rest-client
+          RUSTFLAGS="-C link-dead-code" cargo test --verbose --color always --features rpc-client
+          RUSTFLAGS="-C link-dead-code" cargo test --verbose --color always --features rpc-client,rest-client
+          RUSTFLAGS="-C link-dead-code" cargo test --verbose --color always --features rpc-client,rest-client,tokio
+      - name: Install deps for kcov
+        if: matrix.coverage
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install binutils-dev libcurl4-openssl-dev zlib1g-dev libdw-dev libiberty-dev
+      - name: Install kcov
+        if: matrix.coverage
+        run: |
+          wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz
+          tar xzf master.tar.gz
+          cd kcov-master && mkdir build && cd build
+          cmake ..
+          make
+          make install DESTDIR=../../kcov-build
+          cd ../.. && rm -rf kcov-master master.tar.gz
+      - name: Generate coverage report
+        if: matrix.coverage
+        run: |
+          for file in target/debug/deps/lightning*; do
+            [ -x "${file}" ] || continue;
+            mkdir -p "target/cov/$(basename $file)";
+            ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file";
+          done
+      - name: Upload coverage
+        if: matrix.coverage
+        uses: codecov/codecov-action@v2
+        with:
+          # Could you use this to fake the coverage report for your PR? Sure.
+          # Will anyone be impressed by your amazing coverage? No
+          # Maybe if codecov wasn't broken we wouldn't need to do this...
+          token: f421b687-4dc2-4387-ac3d-dc3b2528af57
+          fail_ci_if_error: true
+
+  benchmark:
+    runs-on: ubuntu-latest
+    env:
+      TOOLCHAIN: nightly
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+      - name: Install Rust ${{ env.TOOLCHAIN }} toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+          override: true
+          profile: minimal
+      - name: Cache routing graph snapshot
+        id: cache-graph
+        uses: actions/cache@v2
+        with:
+          path: lightning/net_graph-2021-05-31.bin
+          key: ldk-net_graph-v0.0.15-2021-05-31.bin
+      - name: Fetch routing graph snapshot
+        if: steps.cache-graph.outputs.cache-hit != 'true'
+        run: |
+          wget -O lightning/net_graph-2021-05-31.bin https://bitcoin.ninja/ldk-net_graph-v0.0.15-2021-05-31.bin
+          if [ "$(sha256sum lightning/net_graph-2021-05-31.bin | awk '{ print $1 }')" != "05a5361278f68ee2afd086cc04a1f927a63924be451f3221d380533acfacc303" ]; then
+            echo "Bad hash"
+            exit 1
+          fi
+      - name: Test with Network Graph on Rust ${{ matrix.toolchain }}
+        run: |
+          cd lightning
+          RUSTFLAGS="--cfg=require_route_graph_test" cargo test
+          RUSTFLAGS="--cfg=require_route_graph_test" cargo test --features hashbrown
+          cd ..
+      - name: Run benchmarks on Rust ${{ matrix.toolchain }}
+        run: |
+          cargo bench --features _bench_unstable
+
+  check_commits:
+    runs-on: ubuntu-latest
+    env:
+      # rustc 1.53 regressed and panics when building our (perfectly fine) docs.
+      # See https://github.com/rust-lang/rust/issues/84738
+      TOOLCHAIN: 1.52.1
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Install Rust ${{ env.TOOLCHAIN }} toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+          override: true
+          profile: minimal
+      - name: Fetch full tree and rebase on upstream
+        run: |
+          git remote add upstream https://github.com/lightningdevkit/rust-lightning
+          git fetch upstream
+          export GIT_COMMITTER_EMAIL="rl-ci@example.com"
+          export GIT_COMMITTER_NAME="RL CI"
+          git rebase upstream/main
+      - name: For each commit, run cargo check (including in fuzz)
+        run: ci/check-each-commit.sh upstream/main
+
+  fuzz:
+    runs-on: ubuntu-latest
+    env:
+      TOOLCHAIN: stable
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+      - name: Install Rust 1.58 toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.58
+          override: true
+          profile: minimal
+      - name: Install dependencies for honggfuzz
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install build-essential binutils-dev libunwind-dev
+      - name: Sanity check fuzz targets on Rust ${{ env.TOOLCHAIN }}
+        run: cd fuzz && RUSTFLAGS="--cfg=fuzzing" cargo test --verbose --color always
+      - name: Run fuzzers
+        run: cd fuzz && ./ci-fuzz.sh && cd ..
+      - name: Run lightning-invoice fuzzers
+        run: cd lightning-invoice/fuzz && RUSTFLAGS="--cfg=fuzzing" cargo test --verbose && ./ci-fuzz.sh
+
+  linting:
+    runs-on: ubuntu-latest
+    env:
+      TOOLCHAIN: 1.47.0
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+      - name: Install Rust ${{ env.TOOLCHAIN }} toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+          override: true
+          profile: minimal
+      - name: Install clippy
+        run: |
+          rustup component add clippy
+      - name: Run default clippy linting
+        run: |
+          cargo clippy -- -Aclippy::erasing_op -Aclippy::never_loop -Aclippy::if_same_then_else -Dclippy::try_err

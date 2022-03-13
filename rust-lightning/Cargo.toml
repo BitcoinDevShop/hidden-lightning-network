@@ -1,0 +1,29 @@
+[workspace]
+
+members = [
+    "lightning",
+    "lightning-block-sync",
+    "lightning-invoice",
+    "lightning-net-tokio",
+    "lightning-persister",
+    "lightning-background-processor",
+]
+
+# Our tests do actual crypo and lots of work, the tradeoff for -O1 is well worth it.
+# Ideally we would only do this in profile.test, but profile.test only applies to
+# the test binary, not dependencies, which means most of the critical code still
+# gets compiled as -O0. See
+# https://doc.rust-lang.org/cargo/reference/profiles.html#profile-selection
+[profile.dev]
+opt-level = 1
+panic = "abort"
+
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"
+
+[profile.bench]
+opt-level = 3
+codegen-units = 1
+lto = true

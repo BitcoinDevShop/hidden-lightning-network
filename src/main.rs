@@ -221,9 +221,34 @@ async fn handle_ldk_events(
 		Event::OpenChannelRequest { .. } => {
 			// Unreachable, we don't set manually_accept_inbound_channels
 		}
-		Event::PaymentPathSuccessful { .. } => {}
-		Event::PaymentPathFailed { .. } => {}
-		Event::PaymentFailed { payment_hash, .. } => {
+		Event::PaymentPathSuccessful { .. } => {
+			println!("PaymentPathSuccessful")
+		}
+		Event::PaymentPathFailed {
+			payment_hash,
+			payment_id,
+			rejected_by_dest,
+			network_update,
+			all_paths_failed,
+			path,
+			short_channel_id,
+			retry,
+			error_code,
+			error_data,
+		} => {
+			println!("EVENT: PaymentPathFailed");
+			println!("{:?}", payment_hash);
+			println!("{:?}", payment_id);
+			println!("rejected_by_dest {:?}", rejected_by_dest);
+			println!("network_update {:?}", network_update);
+			println!("all_paths_failed {:?}", all_paths_failed);
+			println!("path {:?}", path);
+			println!("short_channel_id {:?}", short_channel_id);
+			println!("retry {:?}", retry);
+			println!("error_code {:?}", error_code);
+			println!("error_data {:?}", error_data);
+		}
+		Event::PaymentFailed { payment_hash, payment_id } => {
 			print!(
 				"\nEVENT: Failed to send payment to payment hash {:?}: exhausted payment retry attempts",
 				hex_utils::hex_str(&payment_hash.0)

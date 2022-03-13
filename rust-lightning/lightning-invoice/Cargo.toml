@@ -1,0 +1,31 @@
+[package]
+name = "lightning-invoice"
+description = "Data structures to parse and serialize BOLT11 lightning invoices"
+version = "0.13.0"
+authors = ["Sebastian Geisler <sgeisler@wh2.tu-dresden.de>"]
+documentation = "https://docs.rs/lightning-invoice/"
+license = "MIT OR Apache-2.0"
+keywords = [ "lightning", "bitcoin", "invoice", "BOLT11" ]
+readme = "README.md"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["std"]
+no-std = ["hashbrown", "lightning/no-std", "core2/alloc"]
+std = ["bitcoin_hashes/std", "num-traits/std", "lightning/std", "bech32/std"]
+
+[dependencies]
+bech32 = { version = "0.8", default-features = false }
+lightning = { version = "0.0.105", path = "../lightning", default-features = false }
+secp256k1 = { version = "0.20", default-features = false, features = ["recovery", "alloc"] }
+num-traits = { version = "0.2.8", default-features = false }
+bitcoin_hashes = { version = "0.10", default-features = false }
+hashbrown = { version = "0.11", optional = true }
+core2 = { version = "0.3.0", default-features = false, optional = true }
+
+[dev-dependencies]
+lightning = { version = "0.0.105", path = "../lightning", default-features = false, features = ["_test_utils"] }
+hex = "0.4"

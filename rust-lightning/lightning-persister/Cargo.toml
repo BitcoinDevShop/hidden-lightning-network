@@ -1,0 +1,27 @@
+[package]
+name = "lightning-persister"
+version = "0.0.105"
+authors = ["Valentine Wallace", "Matt Corallo"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/lightningdevkit/rust-lightning/"
+description = """
+Utilities to manage Rust-Lightning channel data persistence and retrieval.
+"""
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+_bench_unstable = ["lightning/_bench_unstable"]
+
+[dependencies]
+bitcoin = "0.27"
+lightning = { version = "0.0.105", path = "../lightning" }
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winbase"] }
+
+[dev-dependencies]
+lightning = { version = "0.0.105", path = "../lightning", features = ["_test_utils"] }

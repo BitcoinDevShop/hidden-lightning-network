@@ -1,0 +1,58 @@
+[package]
+name = "lightning"
+version = "0.0.105"
+authors = ["Matt Corallo"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/lightningdevkit/rust-lightning/"
+description = """
+A Bitcoin Lightning library in Rust.
+Does most of the hard work, without implying a specific runtime, requiring clients implement basic network logic, chain interactions and disk storage.
+Still missing tons of error-handling. See GitHub issues for suggested projects if you want to contribute. Don't have to bother telling you not to use this for anything serious, because you'd have to build a client around it to even try.
+"""
+
+[package.metadata.docs.rs]
+features = ["std"]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+# Internal test utilities exposed to other repo crates
+_test_utils = ["hex", "regex", "bitcoin/bitcoinconsensus"]
+# Unlog messages superior at targeted level.
+max_level_off = []
+max_level_error = []
+max_level_warn = []
+max_level_info = []
+max_level_debug = []
+max_level_trace = []
+# Allow signing of local transactions that may have been revoked or will be revoked, for functional testing (e.g. justice tx handling).
+# This is unsafe to use in production because it may result in the counterparty publishing taking our funds.
+unsafe_revoked_tx_signing = []
+_bench_unstable = []
+
+no-std = ["hashbrown", "bitcoin/no-std", "core2/alloc"]
+std = ["bitcoin/std"]
+
+default = ["std"]
+
+[dependencies]
+bitcoin = { version = "0.27", default-features = false, features = ["secp-recovery"] }
+# TODO remove this once rust-bitcoin PR #637 is released
+secp256k1 = { version = "0.20.2", default-features = false, features = ["alloc"] }
+
+hashbrown = { version = "0.11", optional = true }
+hex = { version = "0.4", optional = true }
+regex = { version = "0.1.80", optional = true }
+backtrace = { version = "0.3", optional = true }
+
+core2 = { version = "0.3.0", optional = true, default-features = false }
+
+[dev-dependencies]
+hex = "0.4"
+regex = "0.1.80"
+# TODO remove this once rust-bitcoin PR #637 is released
+secp256k1 = { version = "0.20.2", default-features = false, features = ["alloc"] }
+
+[dev-dependencies.bitcoin]
+version = "0.27"
+default-features = false
+features = ["bitcoinconsensus", "secp-recovery"]

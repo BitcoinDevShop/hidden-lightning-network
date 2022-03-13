@@ -11,6 +11,7 @@ use bitcoin::hashes::Hash;
 use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::key::PublicKey;
 use lightning::chain::keysinterface::{KeysInterface, KeysManager, Recipient};
+use lightning::ln::channelmanager::PaymentSendFailure;
 use lightning::ln::msgs::ErrorAction;
 use lightning::ln::msgs::LightningError;
 use lightning::ln::msgs::NetAddress;
@@ -420,7 +421,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					);
 
 					let fake_preimage = rand::thread_rng().gen::<[u8; 32]>();
-					println!("{:?}", fake_preimage);
+					// println!("{:?}", fake_preimage);
 
 					let payment_hash = PaymentHash(Sha256::hash(&fake_preimage).into_inner());
 
@@ -428,11 +429,33 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						let payment = channel_manager.send_payment(&route, payment_hash, &None);
 						match payment {
 							Ok(payment_id) => {
+								println!("I guess this is success");
 								dbg!(payment_id);
 							}
-							Err(e) => {
-								dbg!("payment failed but I don't know why");
-							}
+							Err(e) => match e {
+								PaymentSendFailure::ParameterError(e) => {
+									println!("parameter error");
+									dbg!(e);
+								}
+								PaymentSendFailure::PathParameterError(e) => {
+									println!("path parameter error");
+									dbg!(e);
+								}
+								PaymentSendFailure::AllFailedRetrySafe(e) => {
+									println!("all failed retry safe");
+									dbg!(e);
+								}
+								PaymentSendFailure::PartialFailure {
+									results,
+									failed_paths_retry,
+									payment_id,
+								} => {
+									println!(
+										"partial failure: {:?} {:?} {:?}",
+										results, failed_paths_retry, payment_id
+									)
+								}
+							},
 						}
 					}
 				}
