@@ -62,6 +62,8 @@ probeprivate 02c10ef3fcde4f4b15d1edda68726908a4d2f7f6f7159b99747c35d77fbc2902e1 
 
 MAYBE
 - [ ] Iterate over a list of UTXOs and see if any are a private channel
+- [ ] Should get different error when channel_id is correct but pubkey is wrong (unknown_next_peer)
+      should be PERM|10, instead we're getting PERM|15
 
 # ldk-sample
 Sample node implementation using LDK.

@@ -485,7 +485,8 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 
 					let carol =
 						"030ac3e942e8407243c62423c7f0d68787ff112b7831c9cd2c7c1639c781591d94";
-					let fake_pubkey = PublicKey::from_str(carol);
+					let dave = "025f22516660cbaa655e1b58fd528f39aaebaa55f903e936323f5881261dd8a9c3";
+					let fake_pubkey = PublicKey::from_str(dave);
 
 					let next_hop = RouteHop {
 						pubkey: fake_pubkey.unwrap(),
