@@ -11,6 +11,8 @@ use bitcoin::hashes::Hash;
 use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::key::PublicKey;
 use lightning::chain::keysinterface::{KeysInterface, KeysManager, Recipient};
+use lightning::ln::msgs::ErrorAction;
+use lightning::ln::msgs::LightningError;
 use lightning::ln::msgs::NetAddress;
 use lightning::ln::{PaymentHash, PaymentPreimage};
 use lightning::routing::network_graph;
@@ -29,6 +31,7 @@ use lightning::util::logger::Logger;
 use lightning_invoice::payment::Payer;
 use lightning_invoice::payment::PaymentError;
 use lightning_invoice::{utils, Currency, Invoice};
+use rand::Rng;
 use std::cell::RefCell;
 use std::env;
 use std::fs::File;
@@ -384,21 +387,54 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						continue;
 					}
 
-					// let invoice = match Invoice::from_str(invoice_str.unwrap()) {
-					// 	Ok(inv) => inv,
-					// 	Err(e) => {
-					// 		println!("ERROR: invalid invoice: {:?}", e);
-					// 		continue;
-					// 	}
-					// };
-					find_routes(
+					let route = find_routes(
 						&invoice_payer,
 						channel_manager.clone(),
 						pubkey_str.unwrap(),
 						&network_graph,
 						&logger,
 						ldk_data_dir.clone(),
-					)
+					);
+
+					if let Ok(route) = route {
+						dbg!(route.paths);
+					// send_fake_payment(route.paths)
+					} else {
+						println!("No route found")
+					}
+				}
+				"sendfakepayment" => {
+					let pubkey_str = words.next();
+					if pubkey_str.is_none() {
+						println!("ERROR: findroutes requires a pubkey: `findroutes <pubkey>`");
+						continue;
+					}
+
+					let route = find_routes(
+						&invoice_payer,
+						channel_manager.clone(),
+						pubkey_str.unwrap(),
+						&network_graph,
+						&logger,
+						ldk_data_dir.clone(),
+					);
+
+					let fake_preimage = rand::thread_rng().gen::<[u8; 32]>();
+					println!("{:?}", fake_preimage);
+
+					let payment_hash = PaymentHash(Sha256::hash(&fake_preimage).into_inner());
+
+					if let Ok(route) = route {
+						let payment = channel_manager.send_payment(&route, payment_hash, &None);
+						match payment {
+							Ok(payment_id) => {
+								dbg!(payment_id);
+							}
+							Err(e) => {
+								dbg!("payment failed but I don't know why");
+							}
+						}
+					}
 				}
 				_ => println!("Unknown command. See `\"help\" for available commands."),
 			}
@@ -418,33 +454,20 @@ fn help() {
 	println!("nodeinfo");
 	println!("listpeers");
 	println!("signmessage <message>");
-	println!("findroutes <pubkey>")
+	println!("findroutes <pubkey>");
+	println!("sendfakepayment")
 }
 
-// invoice_payer
-// let route = router
-// 	.find_route(
-// 		&payer,
-// 		params,
-// 		&payment_hash,
-// 		Some(&first_hops.iter().collect::<Vec<_>>()),
-// 		&self.scorer.lock(),
-// 	)
-// 	.map_err(|e| PaymentError::Routing(e))?;
-// fn send_payment<E: EventHandler>(
-// 	invoice_payer: &InvoicePayer<E>, invoice: &Invoice, payment_storage: PaymentInfoStorage,
-// )
 fn find_routes<E: EventHandler>(
 	invoice_payer: &InvoicePayer<E>, channel_manager: Arc<ChannelManager>, payee_pubkey: &str,
 	network: &NetworkGraph, logger: &FilesystemLogger, ldk_data_dir: String,
-) {
+) -> Result<Route, LightningError> {
 	let our_node_pubkey = channel_manager.get_our_node_id();
 
 	let their_pubkey = match PublicKey::from_str(payee_pubkey) {
 		Ok(pubkey) => pubkey,
 		Err(e) => {
-			eprintln!("That's not a pubkey bro!");
-			return;
+			return Err(LightningError { err: String::new(), action: ErrorAction::IgnoreError })
 		}
 	};
 
@@ -466,12 +489,7 @@ fn find_routes<E: EventHandler>(
 		&scorer,
 	);
 
-	if let Ok(route) = route {
-		// dbg!(route.paths);
-		send_fake_payment(route.paths)
-	} else {
-		println!("No route found")
-	}
+	route
 }
 
 // fn printRoute(route: Route) {
@@ -482,6 +500,8 @@ fn find_routes<E: EventHandler>(
 
 fn send_fake_payment(route: Vec<Vec<RouteHop>>) {
 	dbg!(route);
+
+	// channel_manager.send_payment(route, payment_hash, payment_secret);
 }
 
 fn node_info(channel_manager: Arc<ChannelManager>, peer_manager: Arc<PeerManager>) {
