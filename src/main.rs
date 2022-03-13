@@ -701,6 +701,9 @@ async fn start_ldk() {
 		outbound_payments,
 		ldk_data_dir.clone(),
 		network,
+		network_graph.clone(),
+		logger.clone(),
+		scorer.clone(),
 	)
 	.await;
 

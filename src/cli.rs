@@ -1,5 +1,6 @@
 use crate::disk;
 use crate::hex_utils;
+use crate::Router;
 use crate::{
 	ChannelManager, HTLCStatus, InvoicePayer, MillisatAmount, PaymentInfo, PaymentInfoStorage,
 	PeerManager,
@@ -11,10 +12,22 @@ use bitcoin::secp256k1::key::PublicKey;
 use lightning::chain::keysinterface::{KeysInterface, KeysManager, Recipient};
 use lightning::ln::msgs::NetAddress;
 use lightning::ln::{PaymentHash, PaymentPreimage};
+use lightning::routing::network_graph;
+use lightning::routing::network_graph::NetworkGraph;
+use lightning::routing::router::find_route;
+use lightning::routing::router::PaymentParameters;
+use lightning::routing::router::RouteParameters;
+use lightning::routing::scoring::ProbabilisticScorer;
+use lightning::routing::scoring::Scorer;
 use lightning::util::config::{ChannelConfig, ChannelHandshakeLimits, UserConfig};
+use lightning::util::events::Event;
 use lightning::util::events::EventHandler;
+use lightning::util::logger::Logger;
+use lightning::util::test_utils::TestScorer;
+use lightning_invoice::payment::Payer;
 use lightning_invoice::payment::PaymentError;
 use lightning_invoice::{utils, Currency, Invoice};
+use std::cell::RefCell;
 use std::env;
 use std::io;
 use std::io::{BufRead, Write};
@@ -23,6 +36,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 pub(crate) struct LdkUserInfo {
@@ -142,7 +156,8 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 	invoice_payer: Arc<InvoicePayer<E>>, peer_manager: Arc<PeerManager>,
 	channel_manager: Arc<ChannelManager>, keys_manager: Arc<KeysManager>,
 	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage,
-	ldk_data_dir: String, network: Network,
+	ldk_data_dir: String, network: Network, network_graph: Arc<NetworkGraph>,
+	logger: Arc<dyn Logger>, scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
 ) {
 	println!("LDK startup successful. To view available commands: \"help\".");
 	println!("LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs");
@@ -359,6 +374,10 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						)
 					);
 				}
+				"findroutes" => {
+					println!("Finding route...");
+					find_routes(channel_manager, "", &network_graph, ldk_data_dir)
+				}
 				_ => println!("Unknown command. See `\"help\" for available commands."),
 			}
 		}
@@ -377,6 +396,58 @@ fn help() {
 	println!("nodeinfo");
 	println!("listpeers");
 	println!("signmessage <message>");
+	println!("findroutes <pubkey>")
+}
+
+// invoice_payer
+// let route = router
+// 	.find_route(
+// 		&payer,
+// 		params,
+// 		&payment_hash,
+// 		Some(&first_hops.iter().collect::<Vec<_>>()),
+// 		&self.scorer.lock(),
+// 	)
+// 	.map_err(|e| PaymentError::Routing(e))?;
+// fn send_payment<E: EventHandler>(
+// 	invoice_payer: &InvoicePayer<E>, invoice: &Invoice, payment_storage: PaymentInfoStorage,
+// )
+fn find_routes<E: EventHandler>(
+	invoice_payer: &InvoicePayer<E>, channel_manager: Arc<ChannelManager>, payee_pubkey: &str,
+	network: &NetworkGraph, logger: &dyn Logger,
+	scorer: &Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>, ldk_data_dir: String,
+) {
+	let our_node_pubkey = channel_manager.get_our_node_id();
+
+	let their_pubkey = match PublicKey::from_str(payee_pubkey) {
+		Ok(pubkey) => pubkey,
+		Err(e) => {
+			eprintln!("That's not a pubkey bro!");
+			return;
+		}
+	};
+
+	let payment_params = PaymentParameters::from_node_id(their_pubkey);
+	let route_params =
+		RouteParameters { payment_params, final_value_msat: 1000, final_cltv_expiry_delta: 40 };
+
+	let first_hops = channel_manager.first_hops();
+	// let first_hops = invoice_payer.payer.first_hops();
+
+	let scorer_path = format!("{}/prob_scorer", ldk_data_dir.clone());
+	let scorer =
+		Arc::new(Mutex::new(disk::read_scorer(Path::new(&scorer_path), Arc::new(network.clone()))));
+
+	let scorer = TestScorer::new();
+
+	let route = find_route(
+		&our_node_pubkey,
+		&route_params,
+		network,
+		Some(&first_hops.iter().collect::<Vec<_>>()),
+		logger,
+		&scorer,
+	);
 }
 
 fn node_info(channel_manager: Arc<ChannelManager>, peer_manager: Arc<PeerManager>) {
