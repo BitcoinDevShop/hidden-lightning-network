@@ -512,7 +512,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					match payment {
 						Ok(payment_id) => {
 							let mut state = our_payment_state.lock().unwrap();
-							println!("Saving payment_id {:?} to state", payment_id);
+							// println!("Saving payment_id {:?} to state", payment_id);
 							state.insert(payment_id, route);
 						}
 						Err(e) => {

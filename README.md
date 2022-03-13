@@ -1,3 +1,28 @@
+# hidden-lightning-network
+
+Use LDK to probe the lightning network for the detection of private channels. 
+
+## Reason
+
+We can look at public lightning node stats at places like 1ml.com. But "private channels are private". Except they are not, and we can figure it out.
+
+## How 
+
+Create our own lightning paths and guess channel IDs. If we guess correct, we know a node has a certain private channel based on error code. Then, we can even guess which node is on the other side of the path.
+
+### Hackathon results: 
+
+- Used LDK sample node as a starting point
+- Connected it to our LND based polar instance
+- Queried Routes to the destination target
+- Figured out how to make fake lightning payments through a route
+- Appended our guess route to the end of the path
+- Sent our fake payment, interpreted the results
+- Saved payment attempt state, can infer if our fake payment revealed a private channel
+
+
+### Working notes:
+
 ```
 cargo run <bitcoind-rpc-username>:<bitcoind-rpc-password>@<bitcoind-rpc-host>:<bitcoind-rpc-port> <ldk_storage_directory_path> [<ldk-peer-listening-port>] [bitcoin-network] [announced-listen-addr announced-node-name]
 ```
@@ -33,16 +58,11 @@ probeprivate 02c10ef3fcde4f4b15d1edda68726908a4d2f7f6f7159b99747c35d77fbc2902e1 
 - [x] Interpret payment failure errors
 - [x] Open private channel between bob and carol
 - [x] Create special hops
-- [ ] Detect difference (programatically) between when we use a real channel and not
-  - [ ] Want "final node" to only say true if it's actually the message from the final node
-    - [ ] why doesn't it do that right now?
-  - [ ] How do we escape from the "event" thing that lightning has?
-  - [ ] Should we put fake info into the route hints instead of a fake hop?
+- [x] Detect difference (programatically) between when we use a real channel and not
 
 MAYBE
 - [ ] Iterate over multiple UTXOs and try them out with above
 - [ ] GOAL: Find invisible channels!
-
 
 # ldk-sample
 Sample node implementation using LDK.

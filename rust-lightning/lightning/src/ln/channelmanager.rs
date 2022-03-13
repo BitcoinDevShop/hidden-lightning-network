@@ -3203,8 +3203,6 @@ where
 	/// [`Event::PaymentFailed`]: events::Event::PaymentFailed
 	/// [`Event::PaymentSent`]: events::Event::PaymentSent
 	pub fn abandon_payment(&self, payment_id: PaymentId) {
-		println!("\x1b[93mNOTE\x1b[0m");
-		println!("ABANDONING PAYMENT");
 		let _persistence_guard = PersistenceNotifierGuard::notify_on_drop(
 			&self.total_consistency_lock,
 			&self.persistence_notifier,

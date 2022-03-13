@@ -378,8 +378,6 @@ where
 		ref path, ref session_priv, ref first_hop_htlc_msat, ..
 	} = htlc_source
 	{
-		println!("\x1b[93mNOTE\x1b[0m");
-		println!("HTLCSource::OutboundRoute path: {:?}", path);
 		let mut res = None;
 		let mut htlc_msat = *first_hop_htlc_msat;
 		let mut error_code_ret = None;
@@ -564,7 +562,8 @@ where
 							// TODO: Here (and a few other places) we assume that BADONION errors
 							// are always "sourced" from the node previous to the one which failed
 							// to decode the onion.
-							let payment_retryable = error_code & PERM == PERM && is_from_final_node;
+							let payment_retryable =
+								!(error_code & PERM == PERM && is_from_final_node);
 
 							res = Some((network_update, short_channel_id, payment_retryable));
 

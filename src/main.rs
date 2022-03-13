@@ -25,7 +25,7 @@ use lightning::ln::channelmanager::{
 use lightning::ln::peer_handler::{IgnoringMessageHandler, MessageHandler, SimpleArcPeerManager};
 use lightning::ln::{PaymentHash, PaymentPreimage, PaymentSecret};
 use lightning::routing::network_graph::{NetGraphMsgHandler, NetworkGraph};
-use lightning::routing::router::Route;
+use lightning::routing::router::{Route, RouteHop};
 use lightning::routing::scoring::ProbabilisticScorer;
 use lightning::util::config::UserConfig;
 use lightning::util::events::{Event, PaymentPurpose};
@@ -69,7 +69,13 @@ impl fmt::Display for MillisatAmount {
 	}
 }
 
-// pub fn print_hop(route: Vec<Vec<RouteHop>>) {}
+pub fn print_hops(route: &Vec<RouteHop>) {
+	for (i, hop) in route.iter().enumerate() {
+		println!("==== Hop {} ====", i);
+		println!("PublicKey({})", hop.pubkey);
+		println!("channel_id: {}", hop.short_channel_id);
+	}
+}
 
 pub(crate) struct PaymentInfo {
 	preimage: Option<PaymentPreimage>,
@@ -245,26 +251,27 @@ async fn handle_ldk_events(
 		} => {
 			if let Some(error_code) = error_code {
 				if *error_code == 0x400f {
-					eprintln!("SPOOK SUCCESS: incorrect_or_unknown_payment_details");
+					eprintln!("incorrect_or_unknown_payment_details");
 				} else {
-					eprintln!("SPOOK FAIL Unknown Error: {:#x}", error_code);
+					eprintln!("FAIL Unknown Error: {:#x}", error_code);
 				}
 			}
 
 			// All my other debug friends
-			println!("EVENT: PaymentPathFailed");
-			println!("{:?}", payment_hash);
-			println!("{:?}", payment_id);
-			println!("rejected_by_dest {:?}", rejected_by_dest);
-			println!("network_update {:?}", network_update);
-			println!("all_paths_failed {:?}", all_paths_failed);
-			println!("short_channel_id {:?}", short_channel_id);
-			println!("retry {:?}", retry);
-			println!("error_code {:#x}", error_code.unwrap_or(0));
-			println!("error_data {:?}", error_data);
+			// println!("EVENT: PaymentPathFailed");
+			// println!("{:?}", payment_hash);
+			// println!("{:?}", payment_id);
+			// println!("rejected_by_dest {:?}", rejected_by_dest);
+			// println!("network_update {:?}", network_update);
+			// println!("all_paths_failed {:?}", all_paths_failed);
+			// println!("short_channel_id {:?}", short_channel_id);
+			// println!("retry {:?}", retry);
+			// println!("error_code {:#x}", error_code.unwrap_or(0));
+			// println!("error_data {:?}", error_data);
 
 			println!("\x1b[93mFAILED PATH\x1b[0m");
-			println!("path {:?}", path);
+			// println!("path {:?}", path);
+			print_hops(path);
 
 			let state = our_payment_state.lock().unwrap();
 
@@ -273,19 +280,26 @@ async fn handle_ldk_events(
 				let original_path = state.get(&payment_id);
 
 				if let Some(original_path) = original_path {
+					print_hops(original_path.paths.first().unwrap());
 					// println!("original path {:?}", original_path.paths);
 
 					println!("\x1b[93mVERDICT\x1b[0m");
 					let original_len = original_path.paths.first().unwrap().len();
+					dbg!(original_len);
 
 					let path_len = path.len();
+					dbg!(path_len);
 
 					if original_len != path_len {
+						println!("\x1b[31m");
 						println!("Private channel does not exist");
+						println!("\x1b[0m");
 					} else {
 						let last_hop =
 							original_path.paths.first().unwrap().last().unwrap().short_channel_id;
+						println!("\x1b[32m");
 						println!("Private channel found: {}", last_hop);
+						println!("\x1b[0m");
 					}
 				} else {
 					println!("couldn't find original path in our state")
@@ -295,10 +309,10 @@ async fn handle_ldk_events(
 			}
 		}
 		Event::PaymentFailed { payment_hash, payment_id } => {
-			print!(
-				"\nEVENT: Failed to send payment to payment hash {:?}: exhausted payment retry attempts",
-				hex_utils::hex_str(&payment_hash.0)
-			);
+			// println!(
+			// 	"\nEVENT: Failed to send payment to payment hash {:?}: exhausted payment retry attempts",
+			// 	hex_utils::hex_str(&payment_hash.0)
+			// );
 			print!("> ");
 			io::stdout().flush().unwrap();
 
