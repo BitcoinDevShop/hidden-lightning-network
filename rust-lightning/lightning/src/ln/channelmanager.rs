@@ -3203,6 +3203,8 @@ where
 	/// [`Event::PaymentFailed`]: events::Event::PaymentFailed
 	/// [`Event::PaymentSent`]: events::Event::PaymentSent
 	pub fn abandon_payment(&self, payment_id: PaymentId) {
+		println!("\x1b[93mNOTE\x1b[0m");
+		println!("ABANDONING PAYMENT");
 		let _persistence_guard = PersistenceNotifierGuard::notify_on_drop(
 			&self.total_consistency_lock,
 			&self.persistence_notifier,
@@ -4606,7 +4608,6 @@ where
 
 				let path_failure = match &onion_error {
 					&HTLCFailReason::LightningError { ref err } => {
-						println!("\x1b[93mError\x1b[0m Got a path failure");
 						let (
 							network_update,
 							short_channel_id,

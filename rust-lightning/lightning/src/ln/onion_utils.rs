@@ -378,6 +378,8 @@ where
 		ref path, ref session_priv, ref first_hop_htlc_msat, ..
 	} = htlc_source
 	{
+		println!("\x1b[93mNOTE\x1b[0m");
+		println!("HTLCSource::OutboundRoute path: {:?}", path);
 		let mut res = None;
 		let mut htlc_msat = *first_hop_htlc_msat;
 		let mut error_code_ret = None;
@@ -408,11 +410,8 @@ where
 				// The failing hop includes either the inbound channel to the recipient or the outbound
 				// channel from the current hop (i.e., the next hop's inbound channel).
 				is_from_final_node = route_hop_idx + 1 == path.len();
-				dbg!(is_from_final_node);
 				let failing_route_hop =
 					if is_from_final_node { route_hop } else { &path[route_hop_idx + 1] };
-
-				dbg!(failing_route_hop);
 
 				if let Ok(err_packet) =
 					msgs::DecodedOnionErrorPacket::read(&mut Cursor::new(&packet_decrypted))
@@ -565,9 +564,7 @@ where
 							// TODO: Here (and a few other places) we assume that BADONION errors
 							// are always "sourced" from the node previous to the one which failed
 							// to decode the onion.
-							println!("\x1b[93mNOTE\x1b[0m");
-							let payment_retryable =
-								dbg!(!(error_code & PERM == PERM && is_from_final_node));
+							let payment_retryable = error_code & PERM == PERM && is_from_final_node;
 
 							res = Some((network_update, short_channel_id, payment_retryable));
 

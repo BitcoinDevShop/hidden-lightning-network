@@ -1,7 +1,7 @@
-use crate::disk;
 use crate::disk::FilesystemLogger;
 use crate::hex_utils;
-use crate::Router;
+use crate::{disk, PaymentState};
+
 use crate::{
 	ChannelManager, HTLCStatus, InvoicePayer, MillisatAmount, PaymentInfo, PaymentInfoStorage,
 	PeerManager,
@@ -18,7 +18,6 @@ use lightning::ln::msgs::ErrorAction;
 use lightning::ln::msgs::LightningError;
 use lightning::ln::msgs::NetAddress;
 use lightning::ln::{PaymentHash, PaymentPreimage};
-use lightning::routing::network_graph;
 use lightning::routing::network_graph::NetworkGraph;
 use lightning::routing::router::find_route;
 use lightning::routing::router::PaymentParameters;
@@ -28,16 +27,12 @@ use lightning::routing::router::RouteParameters;
 use lightning::routing::scoring::FixedPenaltyScorer;
 use lightning::routing::scoring::ProbabilisticScorer;
 use lightning::util::config::{ChannelConfig, ChannelHandshakeLimits, UserConfig};
-use lightning::util::events::Event;
 use lightning::util::events::EventHandler;
-use lightning::util::logger::Logger;
 use lightning_invoice::payment::Payer;
 use lightning_invoice::payment::PaymentError;
 use lightning_invoice::{utils, Currency, Invoice};
 use rand::Rng;
-use std::cell::RefCell;
 use std::env;
-use std::fs::File;
 use std::io;
 use std::io::{BufRead, Write};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
@@ -161,11 +156,12 @@ pub(crate) fn parse_startup_args() -> Result<LdkUserInfo, ()> {
 }
 
 pub(crate) async fn poll_for_user_input<E: EventHandler>(
-	invoice_payer: Arc<InvoicePayer<E>>, peer_manager: Arc<PeerManager>,
-	channel_manager: Arc<ChannelManager>, keys_manager: Arc<KeysManager>,
-	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage,
-	ldk_data_dir: String, network: Network, network_graph: Arc<NetworkGraph>,
-	logger: Arc<FilesystemLogger>, scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
+	our_payment_state: PaymentState, invoice_payer: Arc<InvoicePayer<E>>,
+	peer_manager: Arc<PeerManager>, channel_manager: Arc<ChannelManager>,
+	keys_manager: Arc<KeysManager>, inbound_payments: PaymentInfoStorage,
+	outbound_payments: PaymentInfoStorage, ldk_data_dir: String, network: Network,
+	network_graph: Arc<NetworkGraph>, logger: Arc<FilesystemLogger>,
+	scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
 ) {
 	println!("LDK startup successful. To view available commands: \"help\".");
 	println!("LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs");
@@ -430,7 +426,6 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						match payment {
 							Ok(payment_id) => {
 								println!("I guess this is success");
-								dbg!(payment_id);
 							}
 							Err(e) => match e {
 								PaymentSendFailure::ParameterError(e) => {
@@ -513,13 +508,12 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						continue;
 					};
 
-					// dbg!(route.paths.clone());
-
 					let payment = channel_manager.send_payment(&route, payment_hash, &None);
 					match payment {
 						Ok(payment_id) => {
-							println!("I guess this is success");
-							// dbg!(payment_id);
+							let mut state = our_payment_state.lock().unwrap();
+							println!("Saving payment_id {:?} to state", payment_id);
+							state.insert(payment_id, route);
 						}
 						Err(e) => {
 							dbg!(e);

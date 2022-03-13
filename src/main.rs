@@ -18,13 +18,14 @@ use lightning::chain::chaininterface::{BroadcasterInterface, ConfirmationTarget,
 use lightning::chain::chainmonitor;
 use lightning::chain::keysinterface::{InMemorySigner, KeysInterface, KeysManager, Recipient};
 use lightning::chain::{BestBlock, Filter, Watch};
-use lightning::ln::channelmanager;
+use lightning::ln::channelmanager::{self, PaymentId};
 use lightning::ln::channelmanager::{
 	ChainParameters, ChannelManagerReadArgs, SimpleArcChannelManager,
 };
 use lightning::ln::peer_handler::{IgnoringMessageHandler, MessageHandler, SimpleArcPeerManager};
 use lightning::ln::{PaymentHash, PaymentPreimage, PaymentSecret};
 use lightning::routing::network_graph::{NetGraphMsgHandler, NetworkGraph};
+use lightning::routing::router::Route;
 use lightning::routing::scoring::ProbabilisticScorer;
 use lightning::util::config::UserConfig;
 use lightning::util::events::{Event, PaymentPurpose};
@@ -68,6 +69,8 @@ impl fmt::Display for MillisatAmount {
 	}
 }
 
+// pub fn print_hop(route: Vec<Vec<RouteHop>>) {}
+
 pub(crate) struct PaymentInfo {
 	preimage: Option<PaymentPreimage>,
 	secret: Option<PaymentSecret>,
@@ -108,10 +111,14 @@ pub(crate) type InvoicePayer<E> = payment::InvoicePayer<
 
 type Router = DefaultRouter<Arc<NetworkGraph>, Arc<FilesystemLogger>>;
 
+pub type PaymentState = Arc<Mutex<HashMap<PaymentId, Route>>>;
+// pub(crate) type PaymentInfoStorage = Arc<Mutex<HashMap<PaymentHash, PaymentInfo>>>;
+
 async fn handle_ldk_events(
-	channel_manager: Arc<ChannelManager>, bitcoind_client: Arc<BitcoindClient>,
-	keys_manager: Arc<KeysManager>, inbound_payments: PaymentInfoStorage,
-	outbound_payments: PaymentInfoStorage, network: Network, event: &Event,
+	our_payment_state: PaymentState, channel_manager: Arc<ChannelManager>,
+	bitcoind_client: Arc<BitcoindClient>, keys_manager: Arc<KeysManager>,
+	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage, network: Network,
+	event: &Event,
 ) {
 	match event {
 		Event::FundingGenerationReady {
@@ -256,7 +263,36 @@ async fn handle_ldk_events(
 			println!("error_code {:#x}", error_code.unwrap_or(0));
 			println!("error_data {:?}", error_data);
 
+			println!("\x1b[93mFAILED PATH\x1b[0m");
 			println!("path {:?}", path);
+
+			let state = our_payment_state.lock().unwrap();
+
+			println!("\x1b[93mORIGINAL PATH\x1b[0m");
+			if let Some(payment_id) = payment_id {
+				let original_path = state.get(&payment_id);
+
+				if let Some(original_path) = original_path {
+					// println!("original path {:?}", original_path.paths);
+
+					println!("\x1b[93mVERDICT\x1b[0m");
+					let original_len = original_path.paths.first().unwrap().len();
+
+					let path_len = path.len();
+
+					if original_len != path_len {
+						println!("Private channel does not exist");
+					} else {
+						let last_hop =
+							original_path.paths.first().unwrap().last().unwrap().short_channel_id;
+						println!("Private channel found: {}", last_hop);
+					}
+				} else {
+					println!("couldn't find original path in our state")
+				}
+			} else {
+				println!("no payment ID");
+			}
 		}
 		Event::PaymentFailed { payment_hash, payment_id } => {
 			print!(
@@ -612,8 +648,11 @@ async fn start_ldk() {
 	let network = args.network;
 	let bitcoind_rpc = bitcoind_client.clone();
 	let handle = tokio::runtime::Handle::current();
+	let payment_state: PaymentState = Arc::new(Mutex::new(HashMap::new()));
+	let payment_state_for_events = payment_state.clone();
 	let event_handler = move |event: &Event| {
 		handle.block_on(handle_ldk_events(
+			payment_state_for_events.clone(),
 			channel_manager_event_listener.clone(),
 			bitcoind_rpc.clone(),
 			keys_manager_listener.clone(),
@@ -728,6 +767,7 @@ async fn start_ldk() {
 
 	// Start the CLI.
 	cli::poll_for_user_input(
+		payment_state.clone(),
 		invoice_payer.clone(),
 		peer_manager.clone(),
 		channel_manager.clone(),

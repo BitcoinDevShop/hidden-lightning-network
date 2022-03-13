@@ -33,7 +33,13 @@ probeprivate 02c10ef3fcde4f4b15d1edda68726908a4d2f7f6f7159b99747c35d77fbc2902e1 
 - [x] Interpret payment failure errors
 - [x] Open private channel between bob and carol
 - [x] Create special hops
-- [ ] Detect difference between when we use a real channel and not
+- [ ] Detect difference (programatically) between when we use a real channel and not
+  - [ ] Want "final node" to only say true if it's actually the message from the final node
+    - [ ] why doesn't it do that right now?
+  - [ ] How do we escape from the "event" thing that lightning has?
+  - [ ] Should we put fake info into the route hints instead of a fake hop?
+
+MAYBE
 - [ ] Iterate over multiple UTXOs and try them out with above
 - [ ] GOAL: Find invisible channels!
 
