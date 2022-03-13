@@ -6,7 +6,36 @@ cargo run <bitcoind-rpc-username>:<bitcoind-rpc-password>@<bitcoind-rpc-host>:<b
 source .env.local && cargo run $RPC_USER:$RPC_PASS@$RPC_HOST $STORAGE $LISTEN $NETWORK $NAME $ADDR
 ```
 
+```
+ALICE p2p
+connectpeer 031d07c6730b1df65158754e76133deba307feb95526f0c3ca2971d77e0eb6d9a9@127.0.0.1:9735
 
+bob pubkey
+sendfakepayment 02c10ef3fcde4f4b15d1edda68726908a4d2f7f6f7159b99747c35d77fbc2902e1
+
+correct channel id
+probeprivate 02c10ef3fcde4f4b15d1edda68726908a4d2f7f6f7159b99747c35d77fbc2902e1 158329674465280
+
+wrong channel id
+probeprivate 02c10ef3fcde4f4b15d1edda68726908a4d2f7f6f7159b99747c35d77fbc2902e1 158329674465285
+```
+
+- [x] Lightning Node
+- [x] Connects to another lightning node
+- [x] Needs gossip about the network
+- [x] Can create routes
+- [x] "query routes"
+- [x] "send to route"
+- [x] Send fake payments (with fake payment hash)
+- [x] Fork LDK
+- [x] Figure out the error code (16399)
+- [x] Handle unhandled error reason
+- [x] Interpret payment failure errors
+- [x] Open private channel between bob and carol
+- [x] Create special hops
+- [ ] Detect difference between when we use a real channel and not
+- [ ] Iterate over multiple UTXOs and try them out with above
+- [ ] GOAL: Find invisible channels!
 
 
 # ldk-sample
