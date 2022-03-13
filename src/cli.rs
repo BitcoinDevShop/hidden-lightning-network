@@ -12,6 +12,8 @@ use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::key::PublicKey;
 use lightning::chain::keysinterface::{KeysInterface, KeysManager, Recipient};
 use lightning::ln::channelmanager::PaymentSendFailure;
+use lightning::ln::features::ChannelFeatures;
+use lightning::ln::features::NodeFeatures;
 use lightning::ln::msgs::ErrorAction;
 use lightning::ln::msgs::LightningError;
 use lightning::ln::msgs::NetAddress;
@@ -61,7 +63,6 @@ pub(crate) struct LdkUserInfo {
 pub(crate) fn parse_startup_args() -> Result<LdkUserInfo, ()> {
 	if env::args().len() < 3 {
 		println!("ldk-tutorial-node requires 3 arguments: `cargo run <bitcoind-rpc-username>:<bitcoind-rpc-password>@<bitcoind-rpc-host>:<bitcoind-rpc-port> ldk_storage_directory_path [<ldk-incoming-peer-listening-port>] [bitcoin-network] [announced-node-name announced-listen-addr*]`");
-		return Err(());
 	}
 	let bitcoind_rpc_info = env::args().skip(1).next().unwrap();
 	let bitcoind_rpc_info_parts: Vec<&str> = bitcoind_rpc_info.rsplitn(2, "@").collect();
@@ -421,7 +422,6 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					);
 
 					let fake_preimage = rand::thread_rng().gen::<[u8; 32]>();
-					// println!("{:?}", fake_preimage);
 
 					let payment_hash = PaymentHash(Sha256::hash(&fake_preimage).into_inner());
 
@@ -459,6 +459,73 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						}
 					}
 				}
+				"probeprivate" => {
+					let pubkey_str = words.next();
+					let channel_id_str = words.next();
+
+					if pubkey_str.is_none() || channel_id_str.is_none() {
+						println!("ERROR: probeprivate requires pubkey and channel_id: `probeprivate <pubkey> <channel_id>`");
+						continue;
+					}
+
+					let channel_id = channel_id_str.unwrap().parse::<u64>();
+
+					if channel_id.is_err() {
+						println!("channel_id isn't a number");
+						continue;
+					}
+
+					let fake_preimage = rand::thread_rng().gen::<[u8; 32]>();
+
+					let payment_hash = PaymentHash(Sha256::hash(&fake_preimage).into_inner());
+
+					let route = find_routes(
+						&invoice_payer,
+						channel_manager.clone(),
+						pubkey_str.unwrap(),
+						&network_graph,
+						&logger,
+						ldk_data_dir.clone(),
+					);
+
+					let carol =
+						"030ac3e942e8407243c62423c7f0d68787ff112b7831c9cd2c7c1639c781591d94";
+					let fake_pubkey = PublicKey::from_str(carol);
+
+					let next_hop = RouteHop {
+						pubkey: fake_pubkey.unwrap(),
+						node_features: NodeFeatures::known(),
+						short_channel_id: channel_id.unwrap(),
+						channel_features: ChannelFeatures::known(),
+						fee_msat: 1000,
+						cltv_expiry_delta: 40,
+					};
+
+					let route = if let Ok(mut route) = route {
+						// paths should always be a vec<vec<hops>>
+						let inner = route.paths.first_mut().unwrap();
+
+						inner.push(next_hop);
+						route.paths = vec![inner.to_owned()];
+						route
+					} else {
+						println!("No route");
+						continue;
+					};
+
+					// dbg!(route.paths.clone());
+
+					let payment = channel_manager.send_payment(&route, payment_hash, &None);
+					match payment {
+						Ok(payment_id) => {
+							println!("I guess this is success");
+							// dbg!(payment_id);
+						}
+						Err(e) => {
+							dbg!(e);
+						}
+					}
+				}
 				_ => println!("Unknown command. See `\"help\" for available commands."),
 			}
 		}
@@ -478,7 +545,8 @@ fn help() {
 	println!("listpeers");
 	println!("signmessage <message>");
 	println!("findroutes <pubkey>");
-	println!("sendfakepayment")
+	println!("sendfakepayment <pubkey>");
+	println!("probeprivate <pubkey> <channel_id>");
 }
 
 fn find_routes<E: EventHandler>(

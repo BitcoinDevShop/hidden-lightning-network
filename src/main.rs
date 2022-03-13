@@ -236,17 +236,27 @@ async fn handle_ldk_events(
 			error_code,
 			error_data,
 		} => {
+			if let Some(error_code) = error_code {
+				if *error_code == 0x400f {
+					eprintln!("SPOOK SUCCESS: incorrect_or_unknown_payment_details");
+				} else {
+					eprintln!("SPOOK FAIL Unknown Error: {:#x}", error_code);
+				}
+			}
+
+			// All my other debug friends
 			println!("EVENT: PaymentPathFailed");
 			println!("{:?}", payment_hash);
 			println!("{:?}", payment_id);
 			println!("rejected_by_dest {:?}", rejected_by_dest);
 			println!("network_update {:?}", network_update);
 			println!("all_paths_failed {:?}", all_paths_failed);
-			println!("path {:?}", path);
 			println!("short_channel_id {:?}", short_channel_id);
 			println!("retry {:?}", retry);
-			println!("error_code {:?}", error_code);
+			println!("error_code {:#x}", error_code.unwrap_or(0));
 			println!("error_data {:?}", error_data);
+
+			println!("path {:?}", path);
 		}
 		Event::PaymentFailed { payment_hash, payment_id } => {
 			print!(
