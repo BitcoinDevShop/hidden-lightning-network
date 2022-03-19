@@ -425,7 +425,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						let payment = channel_manager.send_payment(&route, payment_hash, &None);
 						match payment {
 							Ok(payment_id) => {
-								println!("I guess this is success");
+								println!("Payment attempt sent");
 							}
 							Err(e) => match e {
 								PaymentSendFailure::ParameterError(e) => {
@@ -456,10 +456,11 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 				}
 				"probeprivate" => {
 					let pubkey_str = words.next();
+					let pubkey_guess = words.next();
 					let channel_id_str = words.next();
 
 					if pubkey_str.is_none() || channel_id_str.is_none() {
-						println!("ERROR: probeprivate requires pubkey and channel_id: `probeprivate <pubkey> <channel_id>`");
+						println!("ERROR: probeprivate requires pubkey, guessed pubkey, and channel_id: `probeprivate <pubkey> <pubkey_guess> <channel_id>`");
 						continue;
 					}
 
@@ -483,10 +484,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						ldk_data_dir.clone(),
 					);
 
-					let carol =
-						"030ac3e942e8407243c62423c7f0d68787ff112b7831c9cd2c7c1639c781591d94";
-					let dave = "025f22516660cbaa655e1b58fd528f39aaebaa55f903e936323f5881261dd8a9c3";
-					let fake_pubkey = PublicKey::from_str(dave);
+					let fake_pubkey = PublicKey::from_str(pubkey_guess.unwrap());
 
 					let next_hop = RouteHop {
 						pubkey: fake_pubkey.unwrap(),
@@ -544,7 +542,7 @@ fn help() {
 	println!("signmessage <message>");
 	println!("findroutes <pubkey>");
 	println!("sendfakepayment <pubkey>");
-	println!("probeprivate <pubkey> <channel_id>");
+	println!("probeprivate <pubkey> <guessed_node> <channel_id>");
 }
 
 fn find_routes<E: EventHandler>(
