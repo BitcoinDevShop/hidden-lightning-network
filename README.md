@@ -2,6 +2,11 @@
 
 Use LDK to probe the lightning network for the detection of private channels. 
 
+## A vague graphical explanation
+
+<img width="594" alt="Screen Shot 2022-03-21 at 6 05 18 PM" src="https://user-images.githubusercontent.com/543668/159377381-b325476d-7380-432d-afb5-bd1a40e3ef10.png">
+
+
 ## Reason
 
 We can look at public lightning node stats at places like 1ml.com. But "private channels are private". Except they are not, and we can figure it out.
