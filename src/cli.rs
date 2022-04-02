@@ -18,14 +18,14 @@ use lightning::ln::msgs::ErrorAction;
 use lightning::ln::msgs::LightningError;
 use lightning::ln::msgs::NetAddress;
 use lightning::ln::{PaymentHash, PaymentPreimage};
-use lightning::routing::network_graph::NetworkGraph;
-use lightning::routing::router::find_route;
+use lightning::routing::network_graph::{NetworkGraph, RoutingFees};
+use lightning::routing::router::{find_route, RouteHint, RouteHintHop};
 use lightning::routing::router::PaymentParameters;
 use lightning::routing::router::Route;
 use lightning::routing::router::RouteHop;
 use lightning::routing::router::RouteParameters;
 use lightning::routing::scoring::FixedPenaltyScorer;
-use lightning::routing::scoring::ProbabilisticScorer;
+use lightning::routing::scoring::{ProbabilisticScorer, ProbabilisticScoringParameters};
 use lightning::util::config::{ChannelConfig, ChannelHandshakeLimits, UserConfig};
 use lightning::util::events::EventHandler;
 use lightning_invoice::payment::Payer;
@@ -34,6 +34,8 @@ use lightning_invoice::{utils, Currency, Invoice};
 use rand::Rng;
 use std::env;
 use std::io;
+use std::fs::File;
+use std::fs;
 use std::io::{BufRead, Write};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::ops::Deref;
@@ -42,6 +44,23 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use serde::{Deserialize, Serialize};
+use serde_json::Result as SerdeResult;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Node {
+    pubkey: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Transaction {
+    block_hash: String,
+    block_height: u64,
+    id: String,
+    block_index: u64,
+    transaction_index: u64,
+    amount: u64,
+}
 
 pub(crate) struct LdkUserInfo {
 	pub(crate) bitcoind_rpc_username: String,
@@ -392,6 +411,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						&network_graph,
 						&logger,
 						ldk_data_dir.clone(),
+                        vec![],
 					);
 
 					if let Ok(route) = route {
@@ -415,6 +435,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						&network_graph,
 						&logger,
 						ldk_data_dir.clone(),
+                        vec![],
 					);
 
 					let fake_preimage = rand::thread_rng().gen::<[u8; 32]>();
@@ -464,6 +485,8 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						continue;
 					}
 
+					let source_pubkey = PublicKey::from_str(pubkey_str.unwrap()).unwrap();
+
 					let channel_id = channel_id_str.unwrap().parse::<u64>();
 
 					if channel_id.is_err() {
@@ -474,18 +497,36 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					let fake_preimage = rand::thread_rng().gen::<[u8; 32]>();
 
 					let payment_hash = PaymentHash(Sha256::hash(&fake_preimage).into_inner());
+                    
+                    // Create the fake route information
+					let fake_pubkey = PublicKey::from_str(pubkey_guess.unwrap()).unwrap();
+
+                    let guessed_fee = RoutingFees {
+                        base_msat: 1000,
+                        proportional_millionths: 1,
+                    };
+                    let next_route_hint = vec![RouteHint(vec![RouteHintHop { 
+                            src_node_id: source_pubkey, // the source
+                            short_channel_id: channel_id.unwrap(),
+                            fees: guessed_fee, 
+                            cltv_expiry_delta: 40, 
+                            htlc_minimum_msat: None,
+                            htlc_maximum_msat: None,
+                        }
+                        ])];
 
 					let route = find_routes(
 						&invoice_payer,
 						channel_manager.clone(),
-						pubkey_str.unwrap(),
+						pubkey_guess.unwrap(), // send to guessed pubkey instead of who we are intending as the target
 						&network_graph,
 						&logger,
 						ldk_data_dir.clone(),
+                        next_route_hint,
 					);
 
-					let fake_pubkey = PublicKey::from_str(pubkey_guess.unwrap());
 
+                    /*
 					let next_hop = RouteHop {
 						pubkey: fake_pubkey.unwrap(),
 						node_features: NodeFeatures::known(),
@@ -497,13 +538,14 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						/// expected at the destination, in excess of the current block height.
 						cltv_expiry_delta: 40,
 					};
+                    */
 
 					let route = if let Ok(mut route) = route {
 						// paths should always be a vec<vec<hops>>
 						let inner = route.paths.first_mut().unwrap();
 
-						inner.push(next_hop);
-						// route.paths = vec![inner.to_owned()];
+						// inner.push(next_hop);
+						route.paths = vec![inner.to_owned()];
 						route
 					} else {
 						println!("No route");
@@ -521,6 +563,120 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 							dbg!(e);
 						}
 					}
+				}
+				"probeall" => {
+					let nodepath = words.next();
+					let txpath = words.next();
+
+					if nodepath.is_none() || txpath.is_none() {
+						println!("ERROR: probeall requires nodefile and txfile: `probeprivate <nodefile> <txfile>`");
+						continue;
+					}
+
+                    // Parse nodefile
+                    let node_data = match fs::read_to_string(nodepath.unwrap()) {
+                        Ok(file) => file,
+                        Err(_) => continue,
+                    };
+                    let nodes: Vec<Node> = match serde_json::from_str(&node_data) {
+                        Ok(n) => n,
+                        Err(_) => continue,
+                    };
+                    println!("{:?}",nodes);
+
+                    // Parse tx file
+                    let tx_data = match fs::read_to_string(txpath.unwrap()) {
+                        Ok(file) => file,
+                        Err(_) => continue,
+                    };
+                    let txs: Vec<Transaction> = match serde_json::from_str(&tx_data) {
+                        Ok(n) => n,
+                        Err(_) => continue,
+                    };
+                    println!("{:?}",txs);
+
+                    
+
+                    /*
+					let source_pubkey = PublicKey::from_str(pubkey_str.unwrap()).unwrap();
+
+					let channel_id = channel_id_str.unwrap().parse::<u64>();
+
+					if channel_id.is_err() {
+						println!("channel_id isn't a number");
+						continue;
+					}
+
+					let fake_preimage = rand::thread_rng().gen::<[u8; 32]>();
+
+					let payment_hash = PaymentHash(Sha256::hash(&fake_preimage).into_inner());
+                    
+                    // Create the fake route information
+					let fake_pubkey = PublicKey::from_str(pubkey_guess.unwrap()).unwrap();
+
+                    let guessed_fee = RoutingFees {
+                        base_msat: 1000,
+                        proportional_millionths: 1,
+                    };
+                    let next_route_hint = vec![RouteHint(vec![RouteHintHop { 
+                            src_node_id: source_pubkey, // the source
+                            short_channel_id: channel_id.unwrap(),
+                            fees: guessed_fee, 
+                            cltv_expiry_delta: 40, 
+                            htlc_minimum_msat: None,
+                            htlc_maximum_msat: None,
+                        }
+                        ])];
+
+					let route = find_routes(
+						&invoice_payer,
+						channel_manager.clone(),
+						pubkey_guess.unwrap(), // send to guessed pubkey instead of who we are intending as the target
+						&network_graph,
+						&logger,
+						ldk_data_dir.clone(),
+                        next_route_hint,
+					);
+
+
+                    /*
+					let next_hop = RouteHop {
+						pubkey: fake_pubkey.unwrap(),
+						node_features: NodeFeatures::known(),
+						short_channel_id: channel_id.unwrap(),
+						channel_features: ChannelFeatures::known(),
+						fee_msat: 1000,
+						// This needs to be adjusted along way?
+						/// The CLTV delta added for this hop. For the last hop, this should be the full CLTV value
+						/// expected at the destination, in excess of the current block height.
+						cltv_expiry_delta: 40,
+					};
+                    */
+
+					let route = if let Ok(mut route) = route {
+						// paths should always be a vec<vec<hops>>
+						let inner = route.paths.first_mut().unwrap();
+
+						// inner.push(next_hop);
+						route.paths = vec![inner.to_owned()];
+						route
+					} else {
+						println!("No route");
+						continue;
+					};
+
+					let payment = channel_manager.send_payment(&route, payment_hash, &None);
+					match payment {
+						Ok(payment_id) => {
+							let mut state = our_payment_state.lock().unwrap();
+							// println!("Saving payment_id {:?} to state", payment_id);
+							state.insert(payment_id, route);
+						}
+						Err(e) => {
+							dbg!(e);
+						}
+					}
+                    */
 				}
 				_ => println!("Unknown command. See `\"help\" for available commands."),
 			}
@@ -543,11 +699,12 @@ fn help() {
 	println!("findroutes <pubkey>");
 	println!("sendfakepayment <pubkey>");
 	println!("probeprivate <pubkey> <guessed_node> <channel_id>");
+	println!("probeprivate <nodefile> <txfile>");
 }
 
 fn find_routes<E: EventHandler>(
 	invoice_payer: &InvoicePayer<E>, channel_manager: Arc<ChannelManager>, payee_pubkey: &str,
-	network: &NetworkGraph, logger: &FilesystemLogger, ldk_data_dir: String,
+	network: &NetworkGraph, logger: &FilesystemLogger, ldk_data_dir: String, private_routes: Vec<RouteHint>,
 ) -> Result<Route, LightningError> {
 	let our_node_pubkey = channel_manager.get_our_node_id();
 
@@ -558,14 +715,19 @@ fn find_routes<E: EventHandler>(
 		}
 	};
 
-	let payment_params = PaymentParameters::from_node_id(their_pubkey);
+	let payment_params = PaymentParameters::from_node_id(their_pubkey).with_route_hints(private_routes);
 	let route_params =
 		RouteParameters { payment_params, final_value_msat: 1000, final_cltv_expiry_delta: 40 };
+
+    // Insert the fake hops at the end as route hints
+
 
 	let first_hops = channel_manager.first_hops();
 
 	// let scorer = TestScorer::new();
-	let scorer = FixedPenaltyScorer::with_penalty(1000);
+	// let scorer = FixedPenaltyScorer::with_penalty(1);
+    let params = ProbabilisticScoringParameters::default();
+    let scorer = ProbabilisticScorer::new(params, network);
 
 	let route = find_route(
 		&our_node_pubkey,

@@ -40,6 +40,8 @@ use lightning_invoice::utils::DefaultRouter;
 use lightning_net_tokio::SocketDescriptor;
 use lightning_persister::FilesystemPersister;
 use rand::{thread_rng, Rng};
+use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt;
@@ -56,6 +58,14 @@ pub(crate) enum HTLCStatus {
 	Pending,
 	Succeeded,
 	Failed,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Attempt {
+	target_pubkey: String,
+	guess_pubkey: String,
+	channel_id: String,
+	result: String,
 }
 
 pub(crate) struct MillisatAmount(Option<u64>);
@@ -124,7 +134,7 @@ async fn handle_ldk_events(
 	our_payment_state: PaymentState, channel_manager: Arc<ChannelManager>,
 	bitcoind_client: Arc<BitcoindClient>, keys_manager: Arc<KeysManager>,
 	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage, network: Network,
-	event: &Event,
+	event: &Event, db: Arc<Mutex<rusqlite::Connection>>,
 ) {
 	match event {
 		Event::FundingGenerationReady {
@@ -250,63 +260,45 @@ async fn handle_ldk_events(
 			error_code,
 			error_data,
 		} => {
+			// get last hop for channel/node details
+			let (last_hop, path) = path.split_last().unwrap();
+			let chan_id = last_hop.short_channel_id;
+			let guessed_node_pubkey = last_hop.pubkey;
+			let node_pubkey = path.last().unwrap().pubkey;
+
 			if let Some(error_code) = error_code {
-				if *error_code == 0x400f {
-					eprintln!("incorrect_or_unknown_payment_details");
-				} else {
-					eprintln!("FAIL Unknown Error: {:#x}", error_code);
-				}
-			}
+				let result = match error_code {
+					0x400f => "incorrect_or_unknown_payment_details",
+					0x100c => "fee_insufficient",
+					0xc005 => "invalid_onion_hmac",
+					0x400a => "unknown_next_peer",
+					_ => "unknown",
+				};
 
-			// All my other debug friends
-			// println!("EVENT: PaymentPathFailed");
-			// println!("{:?}", payment_hash);
-			// println!("{:?}", payment_id);
-			// println!("rejected_by_dest {:?}", rejected_by_dest);
-			// println!("network_update {:?}", network_update);
-			// println!("all_paths_failed {:?}", all_paths_failed);
-			// println!("short_channel_id {:?}", short_channel_id);
-			// println!("retry {:?}", retry);
-			// println!("error_code {:#x}", error_code.unwrap_or(0));
-			// println!("error_data {:?}", error_data);
+				eprintln!("Result: {}", result);
 
-			println!("\x1b[93mFAILED PATH\x1b[0m");
-			// println!("path {:?}", path);
-			print_hops(path);
+				let attempt = Attempt {
+					target_pubkey: node_pubkey.to_string(),
+					guess_pubkey: guessed_node_pubkey.to_string(),
+					channel_id: chan_id.to_string(),
+					result: result.to_string(),
+				};
 
-			let state = our_payment_state.lock().unwrap();
-
-			println!("\x1b[93mORIGINAL PATH\x1b[0m");
-			if let Some(payment_id) = payment_id {
-				let original_path = state.get(&payment_id);
-
-				if let Some(original_path) = original_path {
-					print_hops(original_path.paths.first().unwrap());
-					// println!("original path {:?}", original_path.paths);
-
-					println!("\x1b[93mVERDICT\x1b[0m");
-					let original_len = original_path.paths.first().unwrap().len();
-					dbg!(original_len);
-
-					let path_len = path.len();
-					dbg!(path_len);
-
-					if original_len != path_len {
-						println!("\x1b[31m");
-						println!("Private channel does not exist");
-						println!("\x1b[0m");
-					} else {
-						let last_hop =
-							original_path.paths.first().unwrap().last().unwrap().short_channel_id;
-						println!("\x1b[32m");
-						println!("Private channel found: {}", last_hop);
-						println!("\x1b[0m");
-					}
-				} else {
-					println!("couldn't find original path in our state")
-				}
-			} else {
-				println!("no payment ID");
+				db.clone()
+					.lock()
+					.unwrap()
+					.execute(
+						"INSERT INTO attempt (
+                                target_pubkey, guess_pubkey, channel_id, result)
+                            VALUES (?1, ?2, ?3, ?4)",
+						[
+							&attempt.target_pubkey,
+							&attempt.guess_pubkey,
+							&attempt.channel_id,
+							&attempt.result,
+						],
+					)
+					.unwrap();
 			}
 		}
 		Event::PaymentFailed { payment_hash, payment_id } => {
@@ -652,6 +644,28 @@ async fn start_ldk() {
 		}
 	});
 
+	// Create DB
+	let path = "./my_db.db3";
+	let db_arc: Arc<Mutex<rusqlite::Connection>> =
+		Arc::new(Mutex::new(Connection::open(&path).unwrap()));
+	// let db = Connection::open(&path).unwrap();
+	// println!("{}", db.is_autocommit());
+
+	db_arc
+		.clone()
+		.lock()
+		.unwrap()
+		.execute(
+			"CREATE TABLE if not exists attempt ( 
+            target_pubkey TEXT,
+            guess_pubkey TEXT,
+            channel_id TEXT,
+            result TEXT
+            )",
+			[], // empty list of parameters.
+		)
+		.unwrap();
+
 	// Step 15: Handle LDK Events
 	let channel_manager_event_listener = channel_manager.clone();
 	let keys_manager_listener = keys_manager.clone();
@@ -675,6 +689,7 @@ async fn start_ldk() {
 			outbound_pmts_for_events.clone(),
 			network,
 			event,
+			db_arc.clone(),
 		));
 	};
 

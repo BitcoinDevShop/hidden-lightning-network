@@ -25,7 +25,10 @@ futures = "0.3"
 chrono = "0.4"
 rand = "0.4"
 serde_json = { version = "1.0" }
+serde = { version = "1.0.136" }
 tokio = { version = "1", features = [ "io-util", "macros", "rt", "rt-multi-thread", "sync", "net", "time" ] }
+
+rusqlite = { version = "0.27.0", features = ["bundled"] }
 
 [profile.release]
 panic = "abort"

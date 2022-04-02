@@ -38,11 +38,17 @@ connectpeer 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768@1
 bob pubkey
 sendfakepayment 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768
 
-correct channel id
+correct channel id, correct pubkey
 probeprivate 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768 03aa4f7f215d551f3bd6e852122d85d0da6b34753ebe03a94b2b7fc092694c6ff5 645413325570048
 
-wrong channel id
+correceer 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768@127.0.0.1:973pubkey
+probeprivate 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768 030ac3e942e8407243c62423c7f0d68787ff112b7831c9cd2c7c1639c781591d94 645413325570048
+
+wrong channel id, correct pubkey
 probeprivate 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768 03aa4f7f215d551f3bd6e852122d85d0da6b34753ebe03a94b2b7fc092694c6ff5 158329674465285
+
+probeall 
+probeall data/nodes.json data/transactions.json
 ```
 
 - [x] Lightning Node
@@ -59,10 +65,9 @@ probeprivate 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768 
 - [x] Open private channel between bob and carol
 - [x] Create special hops
 - [x] Detect difference (programatically) between when we use a real channel and not
-
-MAYBE
+- [x] Write results to the DB
 - [ ] Iterate over a list of UTXOs and see if any are a private channel
-- [ ] Should get different error when channel_id is correct but pubkey is wrong (unknown_next_peer)
+- [x] Should get different error when channel_id is correct but pubkey is wrong (unknown_next_peer)
       should be PERM|10, instead we're getting PERM|15
 
 # ldk-sample

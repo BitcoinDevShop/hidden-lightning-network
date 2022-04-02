@@ -61,6 +61,7 @@ use prelude::*;
 use core::cell::{RefCell, RefMut};
 use core::ops::{Deref, DerefMut};
 use core::time::Duration;
+use std::u64::MAX;
 use io::{self, Read};
 use sync::{Mutex, MutexGuard};
 
@@ -656,8 +657,12 @@ impl<L: Deref<Target = u64>, T: Time, U: Deref<Target = T>> DirectedChannelLiqui
 		} else if amount_msat <= min_liquidity_msat {
 			1.0
 		} else {
-			let numerator = max_liquidity_msat + 1 - amount_msat;
-			let denominator = max_liquidity_msat + 1 - min_liquidity_msat;
+			let numerator = max_liquidity_msat.checked_add(1).unwrap_or(MAX).checked_sub(amount_msat).unwrap_or(0);
+			let denominator = max_liquidity_msat.checked_add(1).unwrap_or(MAX).checked_sub(min_liquidity_msat).unwrap_or(0);
+            if numerator == 0 || denominator == 0  {
+               return 0.0
+            }
+
 			numerator as f64 / denominator as f64
 		}.max(0.01) // Lower bound the success probability to ensure some channel is selected.
 	}
