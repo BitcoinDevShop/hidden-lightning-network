@@ -524,11 +524,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						"03b2c32c46e0b4b720c4f45f02a0cc4c5475df7ce4d5b1ab563961b1681c6917d6";
 
 					for node in nodes {
-						for tx in txs.clone() {
-							// let txid = Txid::from_str(&tx.id).unwrap();
-							// let funding_txo = OutPoint { txid, index: tx.transaction_index as u16 };
-
-							// let channel_id = funding_txo.to_channel_id();
+						for tx in &txs {
 							let scid = scid_from_parts(
 								tx.block_height,
 								tx.block_index,
