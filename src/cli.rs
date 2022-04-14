@@ -23,6 +23,7 @@ use lightning_invoice::payment::PaymentError;
 use lightning_invoice::{utils, Currency, Invoice};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::io;
@@ -523,6 +524,11 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					let pubkey_guess =
 						"03b2c32c46e0b4b720c4f45f02a0cc4c5475df7ce4d5b1ab563961b1681c6917d6";
 
+					let mut set_of_attempts: HashSet<String> = HashSet::new();
+
+					// TODO: get a vec of attempts from main.rs and put them in here so we don't redo attempts
+					set_of_attempts.insert("abcdefg".into());
+
 					for node in nodes {
 						for tx in &txs {
 							let scid = scid_from_parts(
@@ -530,6 +536,12 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 								tx.block_index,
 								tx.transaction_index,
 							);
+
+							let attempt = format!("{}:{}", node.pubkey, scid.to_string());
+							if set_of_attempts.contains(&attempt) {
+								continue;
+							}
+
 							match probe(
 								&node.pubkey,
 								&scid.to_string(),

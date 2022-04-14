@@ -655,6 +655,10 @@ async fn start_ldk() {
 		)
 		.unwrap();
 
+	// TODO: read attempts
+	// select target_pubkey, channel_id from attempt
+	// should end up with a vec of attempts
+
 	// Step 15: Handle LDK Events
 	let channel_manager_event_listener = channel_manager.clone();
 	let keys_manager_listener = keys_manager.clone();
