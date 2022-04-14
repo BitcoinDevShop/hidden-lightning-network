@@ -3,6 +3,7 @@ mod cli;
 mod convert;
 mod disk;
 mod hex_utils;
+mod probe;
 
 use crate::bitcoind_client::BitcoindClient;
 use crate::disk::FilesystemLogger;

@@ -11,3 +11,4 @@ Cargo.lock
 .ldk
 
 .env.local
+my_db.db3
