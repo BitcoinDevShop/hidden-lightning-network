@@ -12,33 +12,19 @@ use bitcoin::hashes::Hash;
 use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::key::PublicKey;
 use lightning::chain::keysinterface::{KeysInterface, KeysManager, Recipient};
-use lightning::chain::transaction::OutPoint;
 use lightning::ln::channelmanager::PaymentSendFailure;
-use lightning::ln::features::ChannelFeatures;
-use lightning::ln::features::NodeFeatures;
-use lightning::ln::msgs::ErrorAction;
-use lightning::ln::msgs::LightningError;
 use lightning::ln::msgs::NetAddress;
 use lightning::ln::{PaymentHash, PaymentPreimage};
-use lightning::routing::network_graph::{NetworkGraph, RoutingFees};
-use lightning::routing::router::PaymentParameters;
-use lightning::routing::router::Route;
-use lightning::routing::router::RouteHop;
-use lightning::routing::router::RouteParameters;
-use lightning::routing::router::{find_route, RouteHint, RouteHintHop};
-use lightning::routing::scoring::FixedPenaltyScorer;
-use lightning::routing::scoring::{ProbabilisticScorer, ProbabilisticScoringParameters};
+use lightning::routing::network_graph::NetworkGraph;
+use lightning::routing::scoring::ProbabilisticScorer;
 use lightning::util::config::{ChannelConfig, ChannelHandshakeLimits, UserConfig};
 use lightning::util::events::EventHandler;
-use lightning_invoice::payment::Payer;
 use lightning_invoice::payment::PaymentError;
 use lightning_invoice::{utils, Currency, Invoice};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serde_json::Result as SerdeResult;
 use std::env;
 use std::fs;
-use std::fs::File;
 use std::io;
 use std::io::{BufRead, Write};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
@@ -182,7 +168,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 	keys_manager: Arc<KeysManager>, inbound_payments: PaymentInfoStorage,
 	outbound_payments: PaymentInfoStorage, ldk_data_dir: String, network: Network,
 	network_graph: Arc<NetworkGraph>, logger: Arc<FilesystemLogger>,
-	scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
+	_scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
 ) {
 	println!("LDK startup successful. To view available commands: \"help\".");
 	println!("LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs");
@@ -447,7 +433,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					if let Ok(route) = route {
 						let payment = channel_manager.send_payment(&route, payment_hash, &None);
 						match payment {
-							Ok(payment_id) => {
+							Ok(_payment_id) => {
 								println!("Payment attempt sent");
 							}
 							Err(e) => match e {
@@ -587,18 +573,6 @@ fn help() {
 	println!("sendfakepayment <pubkey>");
 	println!("probeprivate <pubkey> <guessed_node> <channel_id>");
 	println!("probeprivate <nodefile> <txfile>");
-}
-
-// fn printRoute(route: Route) {
-// for path in route.clone().paths[0] {
-// 	println!("{:?}", path.pubkey)
-// }
-// }
-
-fn send_fake_payment(route: Vec<Vec<RouteHop>>) {
-	dbg!(route);
-
-	// channel_manager.send_payment(route, payment_hash, payment_secret);
 }
 
 fn node_info(channel_manager: Arc<ChannelManager>, peer_manager: Arc<PeerManager>) {

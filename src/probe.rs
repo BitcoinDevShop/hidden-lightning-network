@@ -1,27 +1,22 @@
 use crate::disk::FilesystemLogger;
-use crate::hex_utils;
-use crate::{disk, PaymentState};
 
-use crate::{
-	ChannelManager, HTLCStatus, InvoicePayer, MillisatAmount, PaymentInfo, PaymentInfoStorage,
-	PeerManager,
-};
+use crate::{ChannelManager, InvoicePayer};
 use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::Hash;
 use bitcoin::secp256k1::key::PublicKey;
 use lightning::ln::msgs::ErrorAction;
 use lightning::ln::msgs::LightningError;
-use lightning::ln::{PaymentHash, PaymentPreimage};
+use lightning::ln::PaymentHash;
 use lightning::routing::network_graph::{NetworkGraph, RoutingFees};
 use lightning::routing::router::PaymentParameters;
 use lightning::routing::router::Route;
 use lightning::routing::router::RouteParameters;
 use lightning::routing::router::{find_route, RouteHint, RouteHintHop};
 use lightning::routing::scoring::{ProbabilisticScorer, ProbabilisticScoringParameters};
-use lightning::util::config::{ChannelConfig, ChannelHandshakeLimits, UserConfig};
+
 use lightning::util::events::EventHandler;
 use lightning_invoice::payment::Payer;
-use lightning_invoice::{utils, Currency, Invoice};
+
 use rand::Rng;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -90,15 +85,15 @@ pub(crate) fn probe<E: EventHandler>(
 }
 
 pub(crate) fn find_routes<E: EventHandler>(
-	invoice_payer: &InvoicePayer<E>, channel_manager: Arc<ChannelManager>, payee_pubkey: &str,
-	network: &NetworkGraph, logger: &FilesystemLogger, ldk_data_dir: String,
+	_invoice_payer: &InvoicePayer<E>, channel_manager: Arc<ChannelManager>, payee_pubkey: &str,
+	network: &NetworkGraph, logger: &FilesystemLogger, _ldk_data_dir: String,
 	private_routes: Vec<RouteHint>,
 ) -> Result<Route, LightningError> {
 	let our_node_pubkey = channel_manager.get_our_node_id();
 
 	let their_pubkey = match PublicKey::from_str(payee_pubkey) {
 		Ok(pubkey) => pubkey,
-		Err(e) => {
+		Err(_e) => {
 			return Err(LightningError { err: String::new(), action: ErrorAction::IgnoreError })
 		}
 	};

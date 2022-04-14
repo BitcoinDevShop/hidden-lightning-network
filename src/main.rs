@@ -132,7 +132,7 @@ pub type PaymentState = Arc<Mutex<HashMap<PaymentId, Route>>>;
 // pub(crate) type PaymentInfoStorage = Arc<Mutex<HashMap<PaymentHash, PaymentInfo>>>;
 
 async fn handle_ldk_events(
-	our_payment_state: PaymentState, channel_manager: Arc<ChannelManager>,
+	_our_payment_state: PaymentState, channel_manager: Arc<ChannelManager>,
 	bitcoind_client: Arc<BitcoindClient>, keys_manager: Arc<KeysManager>,
 	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage, network: Network,
 	event: &Event, db: Arc<Mutex<rusqlite::Connection>>,
@@ -248,19 +248,7 @@ async fn handle_ldk_events(
 		Event::PaymentPathSuccessful { .. } => {
 			println!("PaymentPathSuccessful")
 		}
-		Event::PaymentPathFailed {
-			payment_hash,
-			payment_id,
-			// TODO why is rejected by dest always true?
-			rejected_by_dest,
-			network_update,
-			all_paths_failed,
-			path,
-			short_channel_id,
-			retry,
-			error_code,
-			error_data,
-		} => {
+		Event::PaymentPathFailed { path, error_code, .. } => {
 			// get last hop for channel/node details
 			let (last_hop, path) = path.split_last().unwrap();
 			let chan_id = last_hop.short_channel_id;
@@ -302,7 +290,7 @@ async fn handle_ldk_events(
 					.unwrap();
 			}
 		}
-		Event::PaymentFailed { payment_hash, payment_id } => {
+		Event::PaymentFailed { payment_hash, .. } => {
 			// println!(
 			// 	"\nEVENT: Failed to send payment to payment hash {:?}: exhausted payment retry attempts",
 			// 	hex_utils::hex_str(&payment_hash.0)
