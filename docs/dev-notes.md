@@ -14,7 +14,7 @@ Starting with block height 477120 when segwit activated
 Stop at height from API: `GET /blocks/tip/height`
 
 
-
+```
 For each block height `X` from `start_height` to `end_height`:
 	Get the `hash` of the block currently parsing `GET /block-height/:height` replacing `height` with `X`
 
@@ -33,7 +33,7 @@ For each block height `X` from `start_height` to `end_height`:
 
 			Save blockheight `X`, transaction index `Y`, vout `Z`
 
-
+```
 
 Example:
 
