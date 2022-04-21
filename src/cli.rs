@@ -43,7 +43,7 @@ pub(crate) struct Node {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub(crate) struct Transaction {
-	block_hash: String,
+	//block_hash: String,
 	block_height: u64,
 	id: String,
 	block_index: u64,
@@ -501,24 +501,55 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					// Parse nodefile
 					let node_data = match fs::read_to_string(nodepath.unwrap()) {
 						Ok(file) => file,
-						Err(_) => continue,
+						Err(e) => {
+							println!("{:?}", e.into_inner().unwrap());
+							continue;
+						}
 					};
 					let nodes: Vec<Node> = match serde_json::from_str(&node_data) {
 						Ok(n) => n,
-						Err(_) => continue,
+						Err(e) => {
+							println!("{:?}", e);
+							continue;
+						}
 					};
 					println!("{:?}", nodes);
 
-					// Parse tx file
-					let tx_data = match fs::read_to_string(txpath.unwrap()) {
-						Ok(file) => file,
-						Err(_) => continue,
-					};
-					let txs: Vec<Transaction> = match serde_json::from_str(&tx_data) {
-						Ok(n) => n,
-						Err(_) => continue,
-					};
-					println!("{:?}", txs);
+					// Parse tx files
+					let mut txs: Vec<Transaction> = vec![];
+					let read_res = fs::read_dir(txpath.unwrap());
+					match read_res {
+						Ok(txdir) => {
+							for json_file in txdir {
+								println!(
+									"Reading tx file: {:?}",
+									json_file.as_ref().unwrap().file_name().as_os_str().to_str()
+								);
+								let tx_data = match fs::read_to_string(json_file.unwrap().path()) {
+									Ok(file) => file,
+									Err(e) => {
+										println!("{:?}", e.into_inner().unwrap());
+										continue;
+									}
+								};
+								let mut new_txs: Vec<Transaction> =
+									match serde_json::from_str(&tx_data) {
+										Ok(n) => n,
+										Err(e) => {
+											println!("{:?}", e);
+											continue;
+										}
+									};
+								//println!("{:?}", new_txs);
+								txs.append(&mut new_txs);
+							}
+						}
+						Err(e) => {
+							println!("{:?}", e.into_inner().unwrap());
+							continue;
+						}
+					}
+					// println!("{:?}", txs);
 
 					// This doesn't matter right now so we'll hardcode it
 					let pubkey_guess =
