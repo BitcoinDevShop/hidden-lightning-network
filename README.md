@@ -34,6 +34,12 @@ cargo run <bitcoind-rpc-username>:<bitcoind-rpc-password>@<bitcoind-rpc-host>:<b
 source .env.local && cargo run $RPC_USER:$RPC_PASS@$RPC_HOST $STORAGE $LISTEN $NETWORK $NAME $ADDR
 ```
 
+#### For parsing raw utxo transaction files 
+
+```
+cargo run --bin scraper ./data/utxodump.csv ./data/iterate.txt
+```
+
 ## Tony's notes
 
 ```
