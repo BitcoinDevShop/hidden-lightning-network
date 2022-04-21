@@ -12,3 +12,7 @@ Cargo.lock
 
 .env.local
 my_db.db3
+
+# These are raw block/tx files to ignore
+data/iterate.txt
+data/utxodump.csv
