@@ -59,7 +59,7 @@ wrong channel id, correct pubkey
 probeprivate 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768 03aa4f7f215d551f3bd6e852122d85d0da6b34753ebe03a94b2b7fc092694c6ff5 158329674465285
 
 probeall
-probeall data/nodes.json data/transactions.json
+probeall data/nodes.json data/transactions
 ```
 
 ## Paul's notes
