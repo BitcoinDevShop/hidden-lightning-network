@@ -7,15 +7,15 @@
 // You may not use this file except in accordance with one or both of these
 // licenses.
 
-use chain::transaction::OutPoint;
 use chain::keysinterface::SpendableOutputDescriptor;
+use chain::transaction::OutPoint;
 
-use bitcoin::hash_types::Txid;
 use bitcoin::blockdata::transaction::Transaction;
+use bitcoin::hash_types::Txid;
 use bitcoin::secp256k1::key::PublicKey;
 
-use routing::router::Route;
 use ln::chan_utils::HTLCType;
+use routing::router::Route;
 use util::logger::DebugBytes;
 
 pub(crate) struct DebugPubKey<'a>(pub &'a PublicKey);
@@ -30,7 +30,7 @@ impl<'a> core::fmt::Display for DebugPubKey<'a> {
 macro_rules! log_pubkey {
 	($obj: expr) => {
 		::util::macro_logger::DebugPubKey(&$obj)
-	}
+	};
 }
 
 /// Logs a byte slice in hex format.
@@ -38,7 +38,7 @@ macro_rules! log_pubkey {
 macro_rules! log_bytes {
 	($obj: expr) => {
 		$crate::util::logger::DebugBytes(&$obj)
-	}
+	};
 }
 
 pub(crate) struct DebugFundingChannelId<'a>(pub &'a Txid, pub u16);
@@ -53,7 +53,7 @@ impl<'a> core::fmt::Display for DebugFundingChannelId<'a> {
 macro_rules! log_funding_channel_id {
 	($funding_txid: expr, $funding_txo: expr) => {
 		::util::macro_logger::DebugFundingChannelId(&$funding_txid, $funding_txo)
-	}
+	};
 }
 
 pub(crate) struct DebugFundingInfo<'a, T: 'a>(pub &'a (OutPoint, T));
@@ -65,7 +65,7 @@ impl<'a, T> core::fmt::Display for DebugFundingInfo<'a, T> {
 macro_rules! log_funding_info {
 	($key_storage: expr) => {
 		::util::macro_logger::DebugFundingInfo(&$key_storage.get_funding_txo())
-	}
+	};
 }
 
 pub(crate) struct DebugRoute<'a>(pub &'a Route);
@@ -74,7 +74,14 @@ impl<'a> core::fmt::Display for DebugRoute<'a> {
 		for (idx, p) in self.0.paths.iter().enumerate() {
 			writeln!(f, "path {}:", idx)?;
 			for h in p.iter() {
-				writeln!(f, " node_id: {}, short_channel_id: {}, fee_msat: {}, cltv_expiry_delta: {}", log_pubkey!(h.pubkey), h.short_channel_id, h.fee_msat, h.cltv_expiry_delta)?;
+				writeln!(
+					f,
+					" node_id: {}, short_channel_id: {}, fee_msat: {}, cltv_expiry_delta: {}",
+					log_pubkey!(h.pubkey),
+					h.short_channel_id,
+					h.fee_msat,
+					h.cltv_expiry_delta
+				)?;
 			}
 		}
 		Ok(())
@@ -83,29 +90,47 @@ impl<'a> core::fmt::Display for DebugRoute<'a> {
 macro_rules! log_route {
 	($obj: expr) => {
 		::util::macro_logger::DebugRoute(&$obj)
-	}
+	};
 }
 
 pub(crate) struct DebugTx<'a>(pub &'a Transaction);
 impl<'a> core::fmt::Display for DebugTx<'a> {
 	fn fmt(&self, f: &mut core::fmt::Formatter) -> Result<(), core::fmt::Error> {
 		if self.0.input.len() >= 1 && self.0.input.iter().any(|i| !i.witness.is_empty()) {
-			if self.0.input.len() == 1 && self.0.input[0].witness.last().unwrap().len() == 71 &&
-					(self.0.input[0].sequence >> 8*3) as u8 == 0x80 {
+			if self.0.input.len() == 1
+				&& self.0.input[0].witness.last().unwrap().len() == 71
+				&& (self.0.input[0].sequence >> 8 * 3) as u8 == 0x80
+			{
 				write!(f, "commitment tx ")?;
-			} else if self.0.input.len() == 1 && self.0.input[0].witness.last().unwrap().len() == 71 {
+			} else if self.0.input.len() == 1 && self.0.input[0].witness.last().unwrap().len() == 71
+			{
 				write!(f, "closing tx ")?;
-			} else if self.0.input.len() == 1 && HTLCType::scriptlen_to_htlctype(self.0.input[0].witness.last().unwrap().len()) == Some(HTLCType::OfferedHTLC) &&
-					self.0.input[0].witness.len() == 5 {
+			} else if self.0.input.len() == 1
+				&& HTLCType::scriptlen_to_htlctype(self.0.input[0].witness.last().unwrap().len())
+					== Some(HTLCType::OfferedHTLC)
+				&& self.0.input[0].witness.len() == 5
+			{
 				write!(f, "HTLC-timeout tx ")?;
-			} else if self.0.input.len() == 1 && HTLCType::scriptlen_to_htlctype(self.0.input[0].witness.last().unwrap().len()) == Some(HTLCType::AcceptedHTLC) &&
-					self.0.input[0].witness.len() == 5 {
+			} else if self.0.input.len() == 1
+				&& HTLCType::scriptlen_to_htlctype(self.0.input[0].witness.last().unwrap().len())
+					== Some(HTLCType::AcceptedHTLC)
+				&& self.0.input[0].witness.len() == 5
+			{
 				write!(f, "HTLC-success tx ")?;
 			} else {
 				for inp in &self.0.input {
 					if !inp.witness.is_empty() {
-						if HTLCType::scriptlen_to_htlctype(inp.witness.last().unwrap().len()) == Some(HTLCType::OfferedHTLC) { write!(f, "preimage-")?; break }
-						else if HTLCType::scriptlen_to_htlctype(inp.witness.last().unwrap().len()) == Some(HTLCType::AcceptedHTLC) { write!(f, "timeout-")?; break }
+						if HTLCType::scriptlen_to_htlctype(inp.witness.last().unwrap().len())
+							== Some(HTLCType::OfferedHTLC)
+						{
+							write!(f, "preimage-")?;
+							break;
+						} else if HTLCType::scriptlen_to_htlctype(inp.witness.last().unwrap().len())
+							== Some(HTLCType::AcceptedHTLC)
+						{
+							write!(f, "timeout-")?;
+							break;
+						}
 					}
 				}
 				write!(f, "tx ")?;
@@ -122,7 +147,7 @@ impl<'a> core::fmt::Display for DebugTx<'a> {
 macro_rules! log_tx {
 	($obj: expr) => {
 		::util::macro_logger::DebugTx(&$obj)
-	}
+	};
 }
 
 pub(crate) struct DebugSpendable<'a>(pub &'a SpendableOutputDescriptor);
@@ -133,10 +158,18 @@ impl<'a> core::fmt::Display for DebugSpendable<'a> {
 				write!(f, "StaticOutput {}:{} marked for spending", outpoint.txid, outpoint.index)?;
 			}
 			&SpendableOutputDescriptor::DelayedPaymentOutput(ref descriptor) => {
-				write!(f, "DelayedPaymentOutput {}:{} marked for spending", descriptor.outpoint.txid, descriptor.outpoint.index)?;
+				write!(
+					f,
+					"DelayedPaymentOutput {}:{} marked for spending",
+					descriptor.outpoint.txid, descriptor.outpoint.index
+				)?;
 			}
 			&SpendableOutputDescriptor::StaticPaymentOutput(ref descriptor) => {
-				write!(f, "StaticPaymentOutput {}:{} marked for spending", descriptor.outpoint.txid, descriptor.outpoint.index)?;
+				write!(
+					f,
+					"StaticPaymentOutput {}:{} marked for spending",
+					descriptor.outpoint.txid, descriptor.outpoint.index
+				)?;
 			}
 		}
 		Ok(())
@@ -146,7 +179,7 @@ impl<'a> core::fmt::Display for DebugSpendable<'a> {
 macro_rules! log_spendable {
 	($obj: expr) => {
 		::util::macro_logger::DebugSpendable(&$obj)
-	}
+	};
 }
 
 /// Create a new Record and log it. You probably don't want to use this macro directly,

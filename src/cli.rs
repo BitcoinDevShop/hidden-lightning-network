@@ -187,6 +187,10 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 		if let Some(word) = words.next() {
 			match word {
 				"help" => help(),
+				"stop" => {
+					println!("Stopping the program");
+					break;
+				}
 				"openchannel" => {
 					let peer_pubkey_and_ip_addr = words.next();
 					let channel_value_sat = words.next();
@@ -490,11 +494,12 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					}
 				}
 				"probeall" => {
+					let probetype = words.next();
 					let nodepath = words.next();
 					let txpath = words.next();
 
-					if nodepath.is_none() || txpath.is_none() {
-						println!("ERROR: probeall requires nodefile and txfile: `probeprivate <nodefile> <txfile>`");
+					if probetype.is_none() || nodepath.is_none() || txpath.is_none() {
+						println!("ERROR: probeall requires type nodefile and txfile: `probeprivate <probetype> <nodefile> <txfile>`");
 						continue;
 					}
 
@@ -561,7 +566,18 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					set_of_attempts.insert("abcdefg".into());
 
 					for node in nodes {
-						for tx in &txs {
+						let txptr = &txs;
+						for (i, tx) in txptr.into_iter().enumerate() {
+							// check if we are running with assumptions
+							if probetype.unwrap() == "assumptions" {
+								if tx.amount % 10000 != 0 {
+									continue;
+								}
+								if tx.transaction_index > 1 {
+									continue;
+								}
+							}
+
 							let scid = scid_from_parts(
 								tx.block_height,
 								tx.block_index,
@@ -569,6 +585,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 							);
 
 							let attempt = format!("{}:{}", node.pubkey, scid.to_string());
+							println!("{} {}:{}", i, node.pubkey, scid.to_string());
 							if set_of_attempts.contains(&attempt) {
 								continue;
 							}

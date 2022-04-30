@@ -66,7 +66,7 @@ pub(crate) fn probe<E: EventHandler>(
 		route.paths = vec![inner.to_owned()];
 		route
 	} else {
-		eprintln!("No route");
+		println!("No route: {:?}", route.err().unwrap());
 		return Err("no route")?;
 	};
 	let payment = channel_manager.send_payment(&route, payment_hash, &None);
