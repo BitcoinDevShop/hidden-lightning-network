@@ -34,7 +34,7 @@ use lightning::util::config::UserConfig;
 use lightning::util::events::{Event, PaymentPurpose};
 use lightning::util::logger::Logger;
 use lightning::util::ser::ReadableArgs;
-use lightning::{log_given_level, log_internal, log_trace};
+use lightning::{log_debug, log_given_level, log_info, log_internal, log_trace};
 use lightning_background_processor::BackgroundProcessor;
 use lightning_block_sync::init;
 use lightning_block_sync::poll;
@@ -137,10 +137,11 @@ pub type PaymentState = Arc<Mutex<HashMap<PaymentId, Route>>>;
 // pub(crate) type PaymentInfoStorage = Arc<Mutex<HashMap<PaymentHash, PaymentInfo>>>;
 
 async fn handle_ldk_events(
-	_our_payment_state: PaymentState, channel_manager: Arc<ChannelManager>,
+	pending_payment_state: PaymentState, channel_manager: Arc<ChannelManager>,
 	bitcoind_client: Arc<BitcoindClient>, keys_manager: Arc<KeysManager>,
-	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage, network: Network,
-	event: &Event, db: Arc<Mutex<rusqlite::Connection>>, logger: Arc<FilesystemLogger>,
+	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage,
+	pending_payments: PaymentInfoStorage, network: Network, event: &Event,
+	db: Arc<Mutex<rusqlite::Connection>>, logger: Arc<FilesystemLogger>,
 ) {
 	match event {
 		Event::FundingGenerationReady {
@@ -270,7 +271,7 @@ async fn handle_ldk_events(
 					_ => "unknown",
 				};
 
-				log_trace!("Result: {}", result);
+				log_info!(logger, "Result: {}", result);
 
 				let attempt = Attempt {
 					target_pubkey: node_pubkey.to_string(),
@@ -296,18 +297,29 @@ async fn handle_ldk_events(
 					.unwrap();
 			}
 		}
-		Event::PaymentFailed { payment_hash, .. } => {
-			log_trace!(logger,
+		Event::PaymentFailed { payment_hash, payment_id, .. } => {
+			log_debug!(logger,
 				"\nEVENT: Failed to send payment to payment hash {:?}: exhausted payment retry attempts",
 				hex_utils::hex_str(&payment_hash.0)
 			);
 			// print!("> ");
-			io::stdout().flush().unwrap();
+			// io::stdout().flush().unwrap();
 
+			/*
 			let mut payments = outbound_payments.lock().unwrap();
 			if payments.contains_key(&payment_hash) {
 				let payment = payments.get_mut(&payment_hash).unwrap();
 				payment.status = HTLCStatus::Failed;
+			}
+						*/
+			let mut pending_payments_lock = pending_payments.lock().unwrap();
+			if pending_payments_lock.contains_key(&payment_hash) {
+				let _payment = pending_payments_lock.remove(&payment_hash).unwrap();
+				log_trace!(
+					logger,
+					"Removed payment hash {:?} from pending state",
+					hex_utils::hex_str(&payment_hash.0)
+				);
 			}
 		}
 		Event::PaymentForwarded { fee_earned_msat, claim_from_onchain_tx } => {
@@ -673,8 +685,10 @@ async fn start_ldk() {
 	// TODO: persist payment info to disk
 	let inbound_payments: PaymentInfoStorage = Arc::new(Mutex::new(HashMap::new()));
 	let outbound_payments: PaymentInfoStorage = Arc::new(Mutex::new(HashMap::new()));
+	let pending_payments: PaymentInfoStorage = Arc::new(Mutex::new(HashMap::new()));
 	let inbound_pmts_for_events = inbound_payments.clone();
 	let outbound_pmts_for_events = outbound_payments.clone();
+	let pending_pmts_for_events = pending_payments.clone();
 	let network = args.network;
 	let bitcoind_rpc = bitcoind_client.clone();
 	let handle = tokio::runtime::Handle::current();
@@ -689,6 +703,7 @@ async fn start_ldk() {
 			keys_manager_listener.clone(),
 			inbound_pmts_for_events.clone(),
 			outbound_pmts_for_events.clone(),
+			pending_pmts_for_events.clone(),
 			network,
 			event,
 			db_arc.clone(),
@@ -807,6 +822,7 @@ async fn start_ldk() {
 		keys_manager.clone(),
 		inbound_payments,
 		outbound_payments,
+		pending_payments,
 		ldk_data_dir.clone(),
 		network,
 		network_graph.clone(),
@@ -818,7 +834,7 @@ async fn start_ldk() {
 	// Stop the background processor.
 	background_processor.stop().unwrap();
 	// persister.clone().persist_new_channel();
-	let new_p: Arc<YourPersister<InMemorySigner>> = persister.clone();
+	let new_p: Arc<YourPersister> = persister.clone();
 	match new_p.save_file() {
 		Ok(()) => {}
 		Err(_) => {}

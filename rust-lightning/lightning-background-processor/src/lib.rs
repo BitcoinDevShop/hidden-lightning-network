@@ -234,22 +234,64 @@ impl BackgroundProcessor {
 			let mut have_pruned = false;
 
 			loop {
+				let peer_manager_start = Instant::now();
+				log_trace!(logger, "Processing peer events...");
 				peer_manager.process_events(); // Note that this may block on ChannelManager's locking
+				let peer_manager_elapse = peer_manager_start.elapsed();
+				if peer_manager_elapse.as_secs() > 1 {
+					log_warn!(
+						logger,
+						"Processed peer events in {}s",
+						peer_manager_elapse.as_secs_f64()
+					);
+				}
+
+				let channel_manager_start = Instant::now();
+				log_trace!(logger, "Processing channel_manager events...");
 				channel_manager.process_pending_events(&event_handler);
+				let channel_manager_elapse = channel_manager_start.elapsed();
+				if channel_manager_elapse.as_secs() > 1 {
+					log_warn!(
+						logger,
+						"Processed channel_manager events in {}s",
+						channel_manager_elapse.as_secs_f64()
+					);
+				}
+
+				let chain_manager_start = Instant::now();
+				log_trace!(logger, "Processing chain_manager events...");
 				chain_monitor.process_pending_events(&event_handler);
+				let chain_manager_elapse = chain_manager_start.elapsed();
+				if chain_manager_elapse.as_secs() > 1 {
+					log_warn!(
+						logger,
+						"Processed chain_manager events in {}s",
+						chain_manager_elapse.as_secs_f64()
+					);
+				}
 
 				// We wait up to 100ms, but track how long it takes to detect being put to sleep,
 				// see `await_start`'s use below.
+				/*
 				let await_start = Instant::now();
 				let updates_available =
 					channel_manager.await_persistable_update_timeout(Duration::from_millis(100));
 				let await_time = await_start.elapsed();
 
 				if updates_available {
+					let channel_manager_persisting_start = Instant::now();
 					log_trace!(logger, "Persisting ChannelManager...");
 					persister.persist_manager(&*channel_manager)?;
-					log_trace!(logger, "Done persisting ChannelManager.");
+					let channel_manager_elapse = channel_manager_persisting_start.elapsed();
+					if channel_manager_elapse.as_secs() > 1 {
+						log_debug!(
+							logger,
+							"Done persisting ChannelManager in {}s",
+							channel_manager_elapse.as_secs_f64()
+						);
+					}
 				}
+								*/
 				// Exit the loop if the background processor was requested to stop.
 				if stop_thread.load(Ordering::Acquire) == true {
 					log_trace!(logger, "Terminating background processor.");
@@ -260,6 +302,8 @@ impl BackgroundProcessor {
 					channel_manager.timer_tick_occurred();
 					last_freshness_call = Instant::now();
 				}
+
+				/*
 				if await_time > Duration::from_secs(1) {
 					// On various platforms, we may be starved of CPU cycles for several reasons.
 					// E.g. on iOS, if we've been in the background, we will be entirely paused.
@@ -276,7 +320,9 @@ impl BackgroundProcessor {
 					log_trace!(logger, "100ms sleep took more than a second, disconnecting peers.");
 					peer_manager.disconnect_all_peers();
 					last_ping_call = Instant::now();
-				} else if last_ping_call.elapsed().as_secs() > PING_TIMER {
+				} */
+				/*else*/
+				if last_ping_call.elapsed().as_secs() > PING_TIMER {
 					log_trace!(logger, "Calling PeerManager's timer_tick_occurred");
 					peer_manager.timer_tick_occurred();
 					last_ping_call = Instant::now();

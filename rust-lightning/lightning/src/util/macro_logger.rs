@@ -226,18 +226,24 @@ macro_rules! log_error {
 	)
 }
 
+/// log a warning
+#[macro_export]
 macro_rules! log_warn {
 	($logger: expr, $($arg:tt)*) => (
 		log_given_level!($logger, $crate::util::logger::Level::Warn, $($arg)*);
 	)
 }
 
+/// Log a info log.
+#[macro_export]
 macro_rules! log_info {
 	($logger: expr, $($arg:tt)*) => (
 		log_given_level!($logger, $crate::util::logger::Level::Info, $($arg)*);
 	)
 }
 
+/// Log a debug log.
+#[macro_export]
 macro_rules! log_debug {
 	($logger: expr, $($arg:tt)*) => (
 		log_given_level!($logger, $crate::util::logger::Level::Debug, $($arg)*);

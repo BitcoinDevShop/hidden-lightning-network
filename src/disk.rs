@@ -4,6 +4,7 @@ use bitcoin::hash_types::{BlockHash, Txid};
 use bitcoin::hashes::hex::{FromHex, ToHex};
 use bitcoin::secp256k1::key::PublicKey;
 use lightning::chain::chainmonitor::{self, Persist};
+use std::fs::OpenOptions;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 // use bitcoin::BlockHash;
 use chrono::Utc;
@@ -41,7 +42,7 @@ pub struct YourPersister {
 	path_to_channel_data: String,
 	//chan_manager_cache: RwLock<HashMap<OutPoint, MonitorHolder<ChannelSigner>>>,
 	//chan_manager_cache: RwLock<HashMap<OutPoint, ChannelMonitor<ChannelSigner>>>,
-	chan_manager_cache: RwLock<HashMap<OutPoint, Box<dyn Write>>>,
+	chan_manager_cache: RwLock<HashMap<OutPoint, Vec<u8>>>,
 }
 
 struct MonitorHolder<ChannelSigner: Sign> {
@@ -246,7 +247,21 @@ impl YourPersister {
 	}
 
 	pub(crate) fn save_file(&self) -> Result<(), chain::ChannelMonitorUpdateErr> {
-		println!("Going to save file results...");
+		println!("Going to save file results from cache...");
+		for (k, v) in self.chan_manager_cache.read().unwrap().iter() {
+			fs::create_dir_all(self.path_to_monitor_data().clone()).unwrap();
+
+			let filename = format!("{}_{}", k.txid.to_hex(), k.index);
+			println!("Going to save for file {}", filename);
+
+			fs::create_dir_all(self.path_to_monitor_data().clone()).unwrap();
+			let filename_with_path = get_full_filepath(self.path_to_monitor_data(), filename);
+
+			let mut file =
+				OpenOptions::new().create(true).write(true).open(filename_with_path).unwrap();
+
+			std::io::Write::write_all(&mut file, &v);
+		}
 		Ok(())
 	}
 }
@@ -256,27 +271,52 @@ impl<ChannelSigner: Sign> chainmonitor::Persist<ChannelSigner> for YourPersister
 		&self, funding_txo: OutPoint, monitor: &ChannelMonitor<ChannelSigner>,
 		_update_id: chainmonitor::MonitorUpdateId,
 	) -> Result<(), chain::ChannelMonitorUpdateErr> {
+		/*
 		let filename = format!("{}_{}", funding_txo.txid.to_hex(), funding_txo.index);
 		write_to_file(self.path_to_monitor_data(), filename, monitor)
 			.map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
+			*/
+		let data_vec = monitor.encode();
+		self.chan_manager_cache.write().unwrap().insert(funding_txo, data_vec);
+		Ok(())
 	}
 
 	fn update_persisted_channel(
 		&self, id: OutPoint, update: &Option<ChannelMonitorUpdate>,
 		data: &ChannelMonitor<ChannelSigner>, update_id: chainmonitor::MonitorUpdateId,
 	) -> Result<(), chain::ChannelMonitorUpdateErr> {
-		//let mut c = Cursor::new(Vec::new());
+		/*
+		let mut c = Cursor::new(Vec::new());
 		let mut c = BufWriter::new(Vec::new());
 		data.write_to_memory(&mut c).map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
+			*/
+		let data_vec = data.encode();
+		self.chan_manager_cache.write().unwrap().insert(id, data_vec);
+		//println!("Added to chan manager cache");
+		Ok(())
 	}
 
 	fn save_file(&self) -> Result<(), chain::ChannelMonitorUpdateErr> {
 		println!("Going to save file results...");
+		/*
 		let mut c = BufWriter::new(Vec::new());
-		let mut file = File::create("test.txt").unwrap();
-		std::io::Write::write_all(&mut file, c.buffer())
-			.map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
-		//Ok(())
+		write_to_file(self.path_to_monitor_data(), filename, v).unwrap();
+		*/
+		for (k, v) in self.chan_manager_cache.read().unwrap().iter() {
+			fs::create_dir_all(self.path_to_monitor_data().clone()).unwrap();
+
+			let filename = format!("{}_{}", k.txid.to_hex(), k.index);
+			println!("Going to save for file {}", filename);
+
+			fs::create_dir_all(self.path_to_monitor_data().clone()).unwrap();
+			let filename_with_path = get_full_filepath(self.path_to_monitor_data(), filename);
+
+			let mut file =
+				OpenOptions::new().create(true).write(true).open(filename_with_path).unwrap();
+
+			std::io::Write::write_all(&mut file, &v);
+		}
+		Ok(())
 	}
 }
 
@@ -290,6 +330,7 @@ pub(crate) fn get_full_filepath(mut filepath: PathBuf, filename: String) -> Stri
 	filepath.to_str().unwrap().to_string()
 }
 
+/*
 #[allow(bare_trait_objects)]
 pub(crate) fn write_to_file<D: DiskWriteable>(
 	path: PathBuf, filename: String, data: &D,
@@ -328,6 +369,7 @@ pub(crate) fn write_to_file<D: DiskWriteable>(
 	println!("Writing {} took {}s", filename_with_path, now.elapsed().as_secs_f64());
 	Ok(())
 }
+*/
 
 pub(crate) struct FilesystemLogger {
 	data_dir: String,
@@ -341,11 +383,9 @@ impl FilesystemLogger {
 }
 impl Logger for FilesystemLogger {
 	fn log(&self, record: &Record) {
-		/*
-		if record.level.to_string() == "TRACE" {
+		if record.level.to_string() != "INFO" && record.level.to_string() != "WARN" {
 			return;
 		}
-			*/
 		let raw_log = record.args.to_string();
 		let log = format!(
 			"{} {:<5} [{}:{}] {}\n",
@@ -367,13 +407,17 @@ impl Logger for FilesystemLogger {
 	}
 }
 pub(crate) fn persist_channel_peer(path: &Path, peer_info: &str) -> std::io::Result<()> {
+	let now = Instant::now();
 	let mut file = fs::OpenOptions::new().create(true).append(true).open(path)?;
-	std::io::Write::write_all(&mut file, format!("{}\n", peer_info).as_bytes())
+	std::io::Write::write_all(&mut file, format!("{}\n", peer_info).as_bytes()).unwrap();
+	println!("Writing channel_peer took {}s", now.elapsed().as_secs_f64());
+	Ok(())
 }
 
 pub(crate) fn read_channel_peer_data(
 	path: &Path,
 ) -> Result<HashMap<PublicKey, SocketAddr>, std::io::Error> {
+	let now = Instant::now();
 	let mut peer_data = HashMap::new();
 	if !Path::new(&path).exists() {
 		return Ok(HashMap::new());
@@ -388,10 +432,12 @@ pub(crate) fn read_channel_peer_data(
 			Err(e) => return Err(e),
 		}
 	}
+	println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
 	Ok(peer_data)
 }
 
 pub(crate) fn persist_network(path: &Path, network_graph: &NetworkGraph) -> std::io::Result<()> {
+	let now = Instant::now();
 	let mut tmp_path = path.to_path_buf().into_os_string();
 	tmp_path.push(".tmp");
 	let file = fs::OpenOptions::new().write(true).create(true).open(&tmp_path)?;
@@ -400,13 +446,16 @@ pub(crate) fn persist_network(path: &Path, network_graph: &NetworkGraph) -> std:
 		let _ = fs::remove_file(&tmp_path);
 		Err(e)
 	} else {
+		println!("Writing network took {}s", now.elapsed().as_secs_f64());
 		Ok(())
 	}
 }
 
 pub(crate) fn read_network(path: &Path, genesis_hash: BlockHash) -> NetworkGraph {
+	let now = Instant::now();
 	if let Ok(file) = File::open(path) {
 		if let Ok(graph) = NetworkGraph::read(&mut BufReader::new(file)) {
+			println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
 			return graph;
 		}
 	}
@@ -416,6 +465,7 @@ pub(crate) fn read_network(path: &Path, genesis_hash: BlockHash) -> NetworkGraph
 pub(crate) fn persist_scorer(
 	path: &Path, scorer: &ProbabilisticScorer<Arc<NetworkGraph>>,
 ) -> std::io::Result<()> {
+	let now = Instant::now();
 	let mut tmp_path = path.to_path_buf().into_os_string();
 	tmp_path.push(".tmp");
 	let file = fs::OpenOptions::new().write(true).create(true).open(&tmp_path)?;
@@ -424,6 +474,7 @@ pub(crate) fn persist_scorer(
 		let _ = fs::remove_file(&tmp_path);
 		Err(e)
 	} else {
+		println!("Writing scorer took {}s", now.elapsed().as_secs_f64());
 		Ok(())
 	}
 }
@@ -431,11 +482,13 @@ pub(crate) fn persist_scorer(
 pub(crate) fn read_scorer(
 	path: &Path, graph: Arc<NetworkGraph>,
 ) -> ProbabilisticScorer<Arc<NetworkGraph>> {
+	let now = Instant::now();
 	let params = ProbabilisticScoringParameters::default();
 	if let Ok(file) = File::open(path) {
 		if let Ok(scorer) =
 			ProbabilisticScorer::read(&mut BufReader::new(file), (params, Arc::clone(&graph)))
 		{
+			println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
 			return scorer;
 		}
 	}
