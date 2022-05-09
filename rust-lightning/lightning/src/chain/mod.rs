@@ -25,10 +25,10 @@ use prelude::*;
 pub mod chaininterface;
 pub mod chainmonitor;
 pub mod channelmonitor;
-pub mod transaction;
 pub mod keysinterface;
 pub(crate) mod onchaintx;
 pub(crate) mod package;
+pub mod transaction;
 
 /// The best known block as identified by its hash and height.
 #[derive(Clone, Copy, PartialEq)]
@@ -41,10 +41,7 @@ impl BestBlock {
 	/// Constructs a `BestBlock` that represents the genesis block at height 0 of the given
 	/// network.
 	pub fn from_genesis(network: Network) -> Self {
-		BestBlock {
-			block_hash: genesis_block(network).header.block_hash(),
-			height: 0,
-		}
+		BestBlock { block_hash: genesis_block(network).header.block_hash(), height: 0 }
 	}
 
 	/// Returns a `BestBlock` as identified by the given block hash and height.
@@ -53,10 +50,14 @@ impl BestBlock {
 	}
 
 	/// Returns the best block hash.
-	pub fn block_hash(&self) -> BlockHash { self.block_hash }
+	pub fn block_hash(&self) -> BlockHash {
+		self.block_hash
+	}
 
 	/// Returns the best block height.
-	pub fn height(&self) -> u32 { self.height }
+	pub fn height(&self) -> u32 {
+		self.height
+	}
 }
 
 /// An error when accessing the chain via [`Access`].
@@ -77,7 +78,9 @@ pub trait Access {
 	/// is unknown.
 	///
 	/// [`short_channel_id`]: https://github.com/lightningnetwork/lightning-rfc/blob/master/07-routing-gossip.md#definition-of-short_channel_id
-	fn get_utxo(&self, genesis_hash: &BlockHash, short_channel_id: u64) -> Result<TxOut, AccessError>;
+	fn get_utxo(
+		&self, genesis_hash: &BlockHash, short_channel_id: u64,
+	) -> Result<TxOut, AccessError>;
 }
 
 /// The `Listen` trait is used to notify when blocks have been connected or disconnected from the
@@ -272,7 +275,9 @@ pub trait Watch<ChannelSigner: Sign> {
 	/// [`get_outputs_to_watch`]: channelmonitor::ChannelMonitor::get_outputs_to_watch
 	/// [`block_connected`]: channelmonitor::ChannelMonitor::block_connected
 	/// [`block_disconnected`]: channelmonitor::ChannelMonitor::block_disconnected
-	fn watch_channel(&self, funding_txo: OutPoint, monitor: ChannelMonitor<ChannelSigner>) -> Result<(), ChannelMonitorUpdateErr>;
+	fn watch_channel(
+		&self, funding_txo: OutPoint, monitor: ChannelMonitor<ChannelSigner>,
+	) -> Result<(), ChannelMonitorUpdateErr>;
 
 	/// Updates a channel identified by `funding_txo` by applying `update` to its monitor.
 	///
@@ -280,7 +285,9 @@ pub trait Watch<ChannelSigner: Sign> {
 	/// [`ChannelMonitorUpdateErr`] for invariants around returning an error.
 	///
 	/// [`update_monitor`]: channelmonitor::ChannelMonitor::update_monitor
-	fn update_channel(&self, funding_txo: OutPoint, update: ChannelMonitorUpdate) -> Result<(), ChannelMonitorUpdateErr>;
+	fn update_channel(
+		&self, funding_txo: OutPoint, update: ChannelMonitorUpdate,
+	) -> Result<(), ChannelMonitorUpdateErr>;
 
 	/// Returns any monitor events since the last call. Subsequent calls must only return new
 	/// events.
@@ -292,6 +299,9 @@ pub trait Watch<ChannelSigner: Sign> {
 	/// For details on asynchronous [`ChannelMonitor`] updating and returning
 	/// [`MonitorEvent::UpdateCompleted`] here, see [`ChannelMonitorUpdateErr::TemporaryFailure`].
 	fn release_pending_monitor_events(&self) -> Vec<MonitorEvent>;
+
+	/// save persisted channel file when ready, kept in memory until then
+	fn save_file(&self) -> Result<(), ChannelMonitorUpdateErr>;
 }
 
 /// The `Filter` trait defines behavior for indicating chain activity of interest pertaining to

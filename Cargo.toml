@@ -42,8 +42,12 @@ rusqlite = { version = "0.27.0", features = ["bundled"] }
 reqwest = "0.11.10"
 anyhow = "1.0.56"
 
+ctrlc = { version = "3.0", features = ["termination"] }
+
 [profile.release]
 panic = "abort"
+debug = true
+
 
 [profile.dev]
 panic = "abort"

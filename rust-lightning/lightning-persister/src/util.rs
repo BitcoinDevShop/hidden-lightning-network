@@ -3,15 +3,13 @@ extern crate winapi;
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::io::AsRawFd;
 
 #[cfg(target_os = "windows")]
-use {
-	std::ffi::OsStr,
-	std::os::windows::ffi::OsStrExt
-};
+use {std::ffi::OsStr, std::os::windows::ffi::OsStrExt};
 
 pub(crate) trait DiskWriteable {
 	fn write_to_file(&self, writer: &mut fs::File) -> Result<(), std::io::Error>;
@@ -24,13 +22,13 @@ pub(crate) fn get_full_filepath(mut filepath: PathBuf, filename: String) -> Stri
 
 #[cfg(target_os = "windows")]
 macro_rules! call {
-	($e: expr) => (
+	($e: expr) => {
 		if $e != 0 {
-			return Ok(())
+			return Ok(());
 		} else {
-			return Err(std::io::Error::last_os_error())
+			return Err(std::io::Error::last_os_error());
 		}
-	)
+	};
 }
 
 #[cfg(target_os = "windows")]
@@ -39,7 +37,11 @@ fn path_to_windows_str<T: AsRef<OsStr>>(path: T) -> Vec<winapi::shared::ntdef::W
 }
 
 #[allow(bare_trait_objects)]
-pub(crate) fn write_to_file<D: DiskWriteable>(path: PathBuf, filename: String, data: &D) -> std::io::Result<()> {
+pub(crate) fn write_to_file<D: DiskWriteable>(
+	path: PathBuf, filename: String, data: &D,
+) -> std::io::Result<()> {
+	let now = Instant::now();
+
 	fs::create_dir_all(path.clone())?;
 	// Do a crazy dance with lots of fsync()s to be overly cautious here...
 	// We never want to end up in a state where we've lost the old data, or end up using the
@@ -62,38 +64,50 @@ pub(crate) fn write_to_file<D: DiskWriteable>(path: PathBuf, filename: String, d
 		fs::rename(&tmp_filename, &filename_with_path)?;
 		let path = Path::new(&filename_with_path).parent().unwrap();
 		let dir_file = fs::OpenOptions::new().read(true).open(path)?;
-		unsafe { libc::fsync(dir_file.as_raw_fd()); }
+		unsafe {
+			libc::fsync(dir_file.as_raw_fd());
+		}
 	}
 	#[cfg(target_os = "windows")]
 	{
 		let src = PathBuf::from(tmp_filename.clone());
 		let dst = PathBuf::from(filename_with_path.clone());
 		if Path::new(&filename_with_path.clone()).exists() {
-			unsafe {winapi::um::winbase::ReplaceFileW(
-				path_to_windows_str(dst).as_ptr(), path_to_windows_str(src).as_ptr(), std::ptr::null(),
-				winapi::um::winbase::REPLACEFILE_IGNORE_MERGE_ERRORS,
-				std::ptr::null_mut() as *mut winapi::ctypes::c_void,
-				std::ptr::null_mut() as *mut winapi::ctypes::c_void
-			)};
+			unsafe {
+				winapi::um::winbase::ReplaceFileW(
+					path_to_windows_str(dst).as_ptr(),
+					path_to_windows_str(src).as_ptr(),
+					std::ptr::null(),
+					winapi::um::winbase::REPLACEFILE_IGNORE_MERGE_ERRORS,
+					std::ptr::null_mut() as *mut winapi::ctypes::c_void,
+					std::ptr::null_mut() as *mut winapi::ctypes::c_void,
+				)
+			};
 		} else {
-			call!(unsafe {winapi::um::winbase::MoveFileExW(
-				path_to_windows_str(src).as_ptr(), path_to_windows_str(dst).as_ptr(),
-				winapi::um::winbase::MOVEFILE_WRITE_THROUGH | winapi::um::winbase::MOVEFILE_REPLACE_EXISTING
-			)});
+			call!(unsafe {
+				winapi::um::winbase::MoveFileExW(
+					path_to_windows_str(src).as_ptr(),
+					path_to_windows_str(dst).as_ptr(),
+					winapi::um::winbase::MOVEFILE_WRITE_THROUGH
+						| winapi::um::winbase::MOVEFILE_REPLACE_EXISTING,
+				)
+			});
 		}
 	}
+
+	println!("Writing {} took {}s", filename_with_path, now.elapsed().as_secs_f64());
 	Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-	use super::{DiskWriteable, get_full_filepath, write_to_file};
+	use super::{get_full_filepath, write_to_file, DiskWriteable};
 	use std::fs;
 	use std::io;
 	use std::io::Write;
 	use std::path::PathBuf;
 
-	struct TestWriteable{}
+	struct TestWriteable {}
 	impl DiskWriteable for TestWriteable {
 		fn write_to_file(&self, writer: &mut fs::File) -> Result<(), io::Error> {
 			writer.write_all(&[42; 1])
@@ -106,7 +120,7 @@ mod tests {
 	#[cfg(not(target_os = "windows"))]
 	#[test]
 	fn test_readonly_dir() {
-		let test_writeable = TestWriteable{};
+		let test_writeable = TestWriteable {};
 		let filename = "test_readonly_dir_persister_filename".to_string();
 		let path = "test_readonly_dir_persister_dir";
 		fs::create_dir_all(path.to_string()).unwrap();
@@ -115,7 +129,7 @@ mod tests {
 		fs::set_permissions(path.to_string(), perms).unwrap();
 		match write_to_file(PathBuf::from(path.to_string()), filename, &test_writeable) {
 			Err(e) => assert_eq!(e.kind(), io::ErrorKind::PermissionDenied),
-			_ => panic!("Unexpected error message")
+			_ => panic!("Unexpected error message"),
 		}
 	}
 
@@ -129,14 +143,14 @@ mod tests {
 	#[cfg(not(target_os = "windows"))]
 	#[test]
 	fn test_rename_failure() {
-		let test_writeable = TestWriteable{};
+		let test_writeable = TestWriteable {};
 		let filename = "test_rename_failure_filename";
 		let path = PathBuf::from("test_rename_failure_dir");
 		// Create the channel data file and make it a directory.
 		fs::create_dir_all(get_full_filepath(path.clone(), filename.to_string())).unwrap();
 		match write_to_file(path.clone(), filename.to_string(), &test_writeable) {
 			Err(e) => assert_eq!(e.raw_os_error(), Some(libc::EISDIR)),
-			_ => panic!("Unexpected Ok(())")
+			_ => panic!("Unexpected Ok(())"),
 		}
 		fs::remove_dir_all(path).unwrap();
 	}
@@ -152,13 +166,13 @@ mod tests {
 
 		let filename = "test_diskwriteable_failure";
 		let path = PathBuf::from("test_diskwriteable_failure_dir");
-		let test_writeable = FailingWriteable{};
+		let test_writeable = FailingWriteable {};
 		match write_to_file(path.clone(), filename.to_string(), &test_writeable) {
 			Err(e) => {
 				assert_eq!(e.kind(), std::io::ErrorKind::Other);
 				assert_eq!(e.get_ref().unwrap().to_string(), "expected failure");
-			},
-			_ => panic!("unexpected result")
+			}
+			_ => panic!("unexpected result"),
 		}
 		fs::remove_dir_all(path).unwrap();
 	}
@@ -168,7 +182,7 @@ mod tests {
 	// directory.
 	#[test]
 	fn test_tmp_file_creation_failure() {
-		let test_writeable = TestWriteable{};
+		let test_writeable = TestWriteable {};
 		let filename = "test_tmp_file_creation_failure_filename".to_string();
 		let path = PathBuf::from("test_tmp_file_creation_failure_dir");
 
@@ -182,7 +196,7 @@ mod tests {
 				#[cfg(target_os = "windows")]
 				assert_eq!(e.kind(), io::ErrorKind::PermissionDenied);
 			}
-			_ => panic!("Unexpected error message")
+			_ => panic!("Unexpected error message"),
 		}
 	}
 }

@@ -1,18 +1,21 @@
 use crate::disk::FilesystemLogger;
 
-use crate::{ChannelManager, InvoicePayer};
+use crate::{ChannelManager, InvoicePayer, PaymentInfo, PaymentInfoStorage};
 use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::Hash;
 use bitcoin::secp256k1::key::PublicKey;
 use lightning::ln::msgs::ErrorAction;
 use lightning::ln::msgs::LightningError;
-use lightning::ln::PaymentHash;
+use lightning::ln::{PaymentHash, PaymentPreimage};
 use lightning::routing::network_graph::{NetworkGraph, RoutingFees};
 use lightning::routing::router::PaymentParameters;
 use lightning::routing::router::Route;
 use lightning::routing::router::RouteParameters;
 use lightning::routing::router::{find_route, RouteHint, RouteHintHop};
 use lightning::routing::scoring::{ProbabilisticScorer, ProbabilisticScoringParameters};
+use lightning::util::logger::Logger;
+use lightning::{log_given_level, log_internal, log_trace};
+use std::{thread, time::Duration};
 
 use lightning::util::events::EventHandler;
 use lightning_invoice::payment::Payer;
@@ -26,9 +29,7 @@ pub(crate) fn probe<E: EventHandler>(
 	pubkey_str: &str, channel_id_str: &str, pubkey_guess: &str, invoice_payer: &InvoicePayer<E>,
 	channel_manager: Arc<ChannelManager>, network_graph: &Arc<NetworkGraph>,
 	logger: &Arc<FilesystemLogger>, ldk_data_dir: &String,
-	our_payment_state: &Arc<
-		Mutex<std::collections::HashMap<lightning::ln::channelmanager::PaymentId, Route>>,
-	>,
+	pending_payment_state: PaymentInfoStorage,
 ) -> Result<(), Box<dyn std::error::Error>> {
 	let source_pubkey = PublicKey::from_str(pubkey_str).unwrap();
 	let channel_id = channel_id_str.parse::<u64>();
@@ -66,15 +67,23 @@ pub(crate) fn probe<E: EventHandler>(
 		route.paths = vec![inner.to_owned()];
 		route
 	} else {
-		eprintln!("No route");
+		println!("No route: {:?}", route.err().unwrap());
 		return Err("no route")?;
 	};
+
+	let preimage = PaymentPreimage(fake_preimage);
+	let payment_info = PaymentInfo {
+		preimage: Some(preimage),
+		secret: None,
+		status: crate::HTLCStatus::Pending,
+		amt_msat: crate::MillisatAmount(Some(10000)),
+	};
+	let mut state = pending_payment_state.lock().unwrap();
+	state.insert(payment_hash, payment_info);
 	let payment = channel_manager.send_payment(&route, payment_hash, &None);
 	match payment {
 		Ok(payment_id) => {
-			let mut state = our_payment_state.lock().unwrap();
-			// println!("Saving payment_id {:?} to state", payment_id);
-			state.insert(payment_id, route);
+			log_trace!(logger, "sent payment {:?}", payment_id)
 		}
 		Err(e) => {
 			dbg!(e);

@@ -1,4 +1,4 @@
-pub mod bitcoind_client;
+pub(crate) mod bitcoind_client;
 mod cli;
 mod convert;
 mod disk;
@@ -7,18 +7,20 @@ mod probe;
 
 use crate::bitcoind_client::BitcoindClient;
 use crate::disk::FilesystemLogger;
+use crate::disk::YourPersister;
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode;
+use bitcoin::hash_types::BlockHash;
 use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::Secp256k1;
-use bitcoin::BlockHash;
 use bitcoin_bech32::WitnessProgram;
 use lightning::chain;
 use lightning::chain::chaininterface::{BroadcasterInterface, ConfirmationTarget, FeeEstimator};
-use lightning::chain::chainmonitor;
+use lightning::chain::chainmonitor::{self, Persist};
 use lightning::chain::keysinterface::{InMemorySigner, KeysInterface, KeysManager, Recipient};
 use lightning::chain::{BestBlock, Filter, Watch};
+// use lightning::ln::channelmanager::ChannelManager;
 use lightning::ln::channelmanager::{self, PaymentId};
 use lightning::ln::channelmanager::{
 	ChainParameters, ChannelManagerReadArgs, SimpleArcChannelManager,
@@ -30,7 +32,9 @@ use lightning::routing::router::{Route, RouteHop};
 use lightning::routing::scoring::ProbabilisticScorer;
 use lightning::util::config::UserConfig;
 use lightning::util::events::{Event, PaymentPurpose};
+use lightning::util::logger::Logger;
 use lightning::util::ser::ReadableArgs;
+use lightning::{log_debug, log_given_level, log_info, log_internal, log_trace};
 use lightning_background_processor::BackgroundProcessor;
 use lightning_block_sync::init;
 use lightning_block_sync::poll;
@@ -103,7 +107,8 @@ type ChainMonitor = chainmonitor::ChainMonitor<
 	Arc<BitcoindClient>,
 	Arc<BitcoindClient>,
 	Arc<FilesystemLogger>,
-	Arc<FilesystemPersister>,
+	Arc<YourPersister>,
+	//Arc<FilesystemPersister>,
 >;
 
 pub(crate) type PeerManager = SimpleArcPeerManager<
@@ -132,10 +137,11 @@ pub type PaymentState = Arc<Mutex<HashMap<PaymentId, Route>>>;
 // pub(crate) type PaymentInfoStorage = Arc<Mutex<HashMap<PaymentHash, PaymentInfo>>>;
 
 async fn handle_ldk_events(
-	_our_payment_state: PaymentState, channel_manager: Arc<ChannelManager>,
+	pending_payment_state: PaymentState, channel_manager: Arc<ChannelManager>,
 	bitcoind_client: Arc<BitcoindClient>, keys_manager: Arc<KeysManager>,
-	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage, network: Network,
-	event: &Event, db: Arc<Mutex<rusqlite::Connection>>,
+	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage,
+	pending_payments: PaymentInfoStorage, network: Network, event: &Event,
+	db: Arc<Mutex<rusqlite::Connection>>, logger: Arc<FilesystemLogger>,
 ) {
 	match event {
 		Event::FundingGenerationReady {
@@ -246,7 +252,8 @@ async fn handle_ldk_events(
 			// Unreachable, we don't set manually_accept_inbound_channels
 		}
 		Event::PaymentPathSuccessful { .. } => {
-			println!("PaymentPathSuccessful")
+			println!("PaymentPathSuccessful");
+			print!("> ")
 		}
 		Event::PaymentPathFailed { path, error_code, .. } => {
 			// get last hop for channel/node details
@@ -264,7 +271,7 @@ async fn handle_ldk_events(
 					_ => "unknown",
 				};
 
-				eprintln!("Result: {}", result);
+				log_info!(logger, "Result: {}", result);
 
 				let attempt = Attempt {
 					target_pubkey: node_pubkey.to_string(),
@@ -290,18 +297,29 @@ async fn handle_ldk_events(
 					.unwrap();
 			}
 		}
-		Event::PaymentFailed { payment_hash, .. } => {
-			// println!(
-			// 	"\nEVENT: Failed to send payment to payment hash {:?}: exhausted payment retry attempts",
-			// 	hex_utils::hex_str(&payment_hash.0)
-			// );
-			print!("> ");
-			io::stdout().flush().unwrap();
+		Event::PaymentFailed { payment_hash, payment_id, .. } => {
+			log_debug!(logger,
+				"\nEVENT: Failed to send payment to payment hash {:?}: exhausted payment retry attempts",
+				hex_utils::hex_str(&payment_hash.0)
+			);
+			// print!("> ");
+			// io::stdout().flush().unwrap();
 
+			/*
 			let mut payments = outbound_payments.lock().unwrap();
 			if payments.contains_key(&payment_hash) {
 				let payment = payments.get_mut(&payment_hash).unwrap();
 				payment.status = HTLCStatus::Failed;
+			}
+						*/
+			let mut pending_payments_lock = pending_payments.lock().unwrap();
+			if pending_payments_lock.contains_key(&payment_hash) {
+				let _payment = pending_payments_lock.remove(&payment_hash).unwrap();
+				log_trace!(
+					logger,
+					"Removed payment hash {:?} from pending state",
+					hex_utils::hex_str(&payment_hash.0)
+				);
 			}
 		}
 		Event::PaymentForwarded { fee_earned_msat, claim_from_onchain_tx } => {
@@ -421,7 +439,9 @@ async fn start_ldk() {
 	let broadcaster = bitcoind_client.clone();
 
 	// Step 4: Initialize Persist
-	let persister = Arc::new(FilesystemPersister::new(ldk_data_dir.clone()));
+	let real_persister = Arc::new(FilesystemPersister::new(ldk_data_dir.clone()));
+
+	let persister = Arc::new(YourPersister::new(ldk_data_dir.clone()));
 
 	// Step 5: Initialize the ChainMonitor
 	let chain_monitor: Arc<ChainMonitor> = Arc::new(chainmonitor::ChainMonitor::new(
@@ -461,7 +481,7 @@ async fn start_ldk() {
 	let keys_manager = Arc::new(KeysManager::new(&keys_seed, cur.as_secs(), cur.subsec_nanos()));
 
 	// Step 7: Read ChannelMonitor state from disk
-	let mut channelmonitors = persister.read_channelmonitors(keys_manager.clone()).unwrap();
+	let mut channelmonitors = real_persister.read_channelmonitors(keys_manager.clone()).unwrap();
 
 	// Step 8: Initialize the ChannelManager
 	let mut user_config = UserConfig::default();
@@ -665,13 +685,16 @@ async fn start_ldk() {
 	// TODO: persist payment info to disk
 	let inbound_payments: PaymentInfoStorage = Arc::new(Mutex::new(HashMap::new()));
 	let outbound_payments: PaymentInfoStorage = Arc::new(Mutex::new(HashMap::new()));
+	let pending_payments: PaymentInfoStorage = Arc::new(Mutex::new(HashMap::new()));
 	let inbound_pmts_for_events = inbound_payments.clone();
 	let outbound_pmts_for_events = outbound_payments.clone();
+	let pending_pmts_for_events = pending_payments.clone();
 	let network = args.network;
 	let bitcoind_rpc = bitcoind_client.clone();
 	let handle = tokio::runtime::Handle::current();
 	let payment_state: PaymentState = Arc::new(Mutex::new(HashMap::new()));
 	let payment_state_for_events = payment_state.clone();
+	let event_logger = logger.clone();
 	let event_handler = move |event: &Event| {
 		handle.block_on(handle_ldk_events(
 			payment_state_for_events.clone(),
@@ -680,9 +703,11 @@ async fn start_ldk() {
 			keys_manager_listener.clone(),
 			inbound_pmts_for_events.clone(),
 			outbound_pmts_for_events.clone(),
+			pending_pmts_for_events.clone(),
 			network,
 			event,
 			db_arc.clone(),
+			event_logger.clone(),
 		));
 	};
 
@@ -797,6 +822,7 @@ async fn start_ldk() {
 		keys_manager.clone(),
 		inbound_payments,
 		outbound_payments,
+		pending_payments,
 		ldk_data_dir.clone(),
 		network,
 		network_graph.clone(),
@@ -807,6 +833,12 @@ async fn start_ldk() {
 
 	// Stop the background processor.
 	background_processor.stop().unwrap();
+	// persister.clone().persist_new_channel();
+	let new_p: Arc<YourPersister> = persister.clone();
+	match new_p.save_file() {
+		Ok(()) => {}
+		Err(_) => {}
+	};
 }
 
 #[tokio::main]

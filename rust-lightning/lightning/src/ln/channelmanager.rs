@@ -766,14 +766,21 @@ struct PendingInboundPayment {
 
 /// Stores the session_priv for each part of a payment that is still pending. For versions 0.0.102
 /// and later, also stores information for retrying the payment.
-pub(crate) enum PendingOutboundPayment {
+pub enum PendingOutboundPayment {
+	/// comment
 	Legacy {
+		/// comment
 		session_privs: HashSet<[u8; 32]>,
 	},
+	/// comment
 	Retryable {
+		/// comment
 		session_privs: HashSet<[u8; 32]>,
+		/// comment
 		payment_hash: PaymentHash,
+		/// comment
 		payment_secret: Option<PaymentSecret>,
+		/// comment
 		pending_amt_msat: u64,
 		/// Used to track the fee paid. Only present if the payment was serialized on 0.0.103+.
 		pending_fee_msat: Option<u64>,
@@ -786,7 +793,9 @@ pub(crate) enum PendingOutboundPayment {
 	/// been resolved. This ensures we don't look up pending payments in ChannelMonitors on restart
 	/// and add a pending payment that was already fulfilled.
 	Fulfilled {
+		/// comment
 		session_privs: HashSet<[u8; 32]>,
+		/// comment
 		payment_hash: Option<PaymentHash>,
 	},
 	/// When a payer gives up trying to retry a payment, they inform us, letting us generate a
@@ -797,7 +806,9 @@ pub(crate) enum PendingOutboundPayment {
 	///
 	/// (1) https://github.com/lightningdevkit/rust-lightning/issues/1164
 	Abandoned {
+		/// comment
 		session_privs: HashSet<[u8; 32]>,
+		/// comment
 		payment_hash: PaymentHash,
 	},
 }
@@ -1034,7 +1045,7 @@ where
 	/// See `PendingOutboundPayment` documentation for more info.
 	///
 	/// Locked *after* channel_state.
-	pending_outbound_payments: Mutex<HashMap<PaymentId, PendingOutboundPayment>>,
+	pub pending_outbound_payments: Mutex<HashMap<PaymentId, PendingOutboundPayment>>,
 
 	our_network_key: SecretKey,
 	our_network_pubkey: PublicKey,

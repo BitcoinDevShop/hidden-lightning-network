@@ -2,6 +2,7 @@ use crate::disk::FilesystemLogger;
 use crate::hex_utils;
 use crate::probe::{find_routes, probe, scid_from_parts};
 use crate::{disk, PaymentState};
+use std::time::Instant;
 
 use crate::{
 	ChannelManager, HTLCStatus, InvoicePayer, MillisatAmount, PaymentInfo, PaymentInfoStorage,
@@ -11,14 +12,18 @@ use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::Hash;
 use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::key::PublicKey;
+use ctrlc;
 use lightning::chain::keysinterface::{KeysInterface, KeysManager, Recipient};
 use lightning::ln::channelmanager::PaymentSendFailure;
+
 use lightning::ln::msgs::NetAddress;
 use lightning::ln::{PaymentHash, PaymentPreimage};
 use lightning::routing::network_graph::NetworkGraph;
 use lightning::routing::scoring::ProbabilisticScorer;
 use lightning::util::config::{ChannelConfig, ChannelHandshakeLimits, UserConfig};
 use lightning::util::events::EventHandler;
+use lightning::util::logger::Logger;
+use lightning::{log_given_level, log_info, log_internal, log_trace};
 use lightning_invoice::payment::PaymentError;
 use lightning_invoice::{utils, Currency, Invoice};
 use rand::Rng;
@@ -31,9 +36,12 @@ use std::io::{BufRead, Write};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::ops::Deref;
 use std::path::Path;
+use std::process;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::thread;
 use std::time::Duration;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -164,16 +172,29 @@ pub(crate) fn parse_startup_args() -> Result<LdkUserInfo, ()> {
 }
 
 pub(crate) async fn poll_for_user_input<E: EventHandler>(
-	our_payment_state: PaymentState, invoice_payer: Arc<InvoicePayer<E>>,
+	_pending_payment_state: PaymentState, invoice_payer: Arc<InvoicePayer<E>>,
 	peer_manager: Arc<PeerManager>, channel_manager: Arc<ChannelManager>,
 	keys_manager: Arc<KeysManager>, inbound_payments: PaymentInfoStorage,
-	outbound_payments: PaymentInfoStorage, ldk_data_dir: String, network: Network,
-	network_graph: Arc<NetworkGraph>, logger: Arc<FilesystemLogger>,
-	_scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
+	outbound_payments: PaymentInfoStorage, pending_payments: PaymentInfoStorage,
+	ldk_data_dir: String, network: Network, network_graph: Arc<NetworkGraph>,
+	logger: Arc<FilesystemLogger>, _scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
 ) {
 	println!("LDK startup successful. To view available commands: \"help\".");
 	println!("LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs");
 	println!("Local Node ID is {}.", channel_manager.get_our_node_id());
+
+	let running = Arc::new(AtomicUsize::new(0));
+	let r = running.clone();
+	ctrlc::set_handler(move || {
+		let prev = r.fetch_add(1, Ordering::SeqCst);
+		if prev == 0 {
+			println!("Exiting...");
+		} else {
+			process::exit(0);
+		}
+	})
+	.expect("Error setting Ctrl-C handler");
+
 	let stdin = io::stdin();
 	let mut line_reader = stdin.lock().lines();
 	loop {
@@ -187,6 +208,10 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 		if let Some(word) = words.next() {
 			match word {
 				"help" => help(),
+				"stop" => {
+					println!("Stopping the program");
+					break;
+				}
 				"openchannel" => {
 					let peer_pubkey_and_ip_addr = words.next();
 					let channel_value_sat = words.next();
@@ -483,18 +508,19 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						&network_graph,
 						&logger,
 						&ldk_data_dir,
-						&our_payment_state,
+						pending_payments.clone(),
 					) {
 						Ok(_) => continue,
 						Err(_) => continue,
 					}
 				}
 				"probeall" => {
+					let probetype = words.next();
 					let nodepath = words.next();
 					let txpath = words.next();
 
-					if nodepath.is_none() || txpath.is_none() {
-						println!("ERROR: probeall requires nodefile and txfile: `probeprivate <nodefile> <txfile>`");
+					if probetype.is_none() || nodepath.is_none() || txpath.is_none() {
+						println!("ERROR: probeall requires type nodefile and txfile: `probeprivate <probetype> <nodefile> <txfile>`");
 						continue;
 					}
 
@@ -558,10 +584,58 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					let mut set_of_attempts: HashSet<String> = HashSet::new();
 
 					// TODO: get a vec of attempts from main.rs and put them in here so we don't redo attempts
-					set_of_attempts.insert("abcdefg".into());
+					// set_of_attempts.insert("abcdefg".into());
+
+					log_info!(logger, "Starting probing...");
+					let mut total_probes = 1;
+					let probe_start = Instant::now();
 
 					for node in nodes {
-						for tx in &txs {
+						let txptr = &txs;
+						for (i, tx) in txptr.into_iter().enumerate() {
+							// check if the program has been requested to
+							// close down
+
+							loop {
+								// check signal in this loop in case we
+								// are htlc stalled
+								if running.load(Ordering::SeqCst) > 0 {
+									break;
+								}
+								/*
+								let pending_outbound_payments =
+									channel_manager.pending_outbound_payments.lock().unwrap();
+																*/
+								let pending_outbound_payments = pending_payments.lock().unwrap();
+								//let mut pending_state = pending_payment_state.lock().unwrap();
+								// Assuming only 1 channel, TODO a better check
+								//if pending_state.keys().len() > 350 {
+								let len = pending_outbound_payments.keys().len();
+								drop(pending_outbound_payments);
+								if len > 450 {
+									// wait for pending htlc's to clear
+									log_trace!(logger, "Close to max htlc's, waiting...");
+									thread::sleep(Duration::from_millis(10));
+									continue;
+								}
+								break;
+							}
+
+							// check signal again
+							if running.load(Ordering::SeqCst) > 0 {
+								break;
+							}
+
+							// check if we are running with assumptions
+							if probetype.unwrap() == "assumptions" {
+								if tx.amount % 10000 != 0 {
+									continue;
+								}
+								if tx.transaction_index > 1 {
+									continue;
+								}
+							}
+
 							let scid = scid_from_parts(
 								tx.block_height,
 								tx.block_index,
@@ -573,6 +647,21 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 								continue;
 							}
 
+							let mut elapsed = probe_start.elapsed().as_secs();
+							if elapsed == 0 {
+								elapsed = 1;
+							}
+							println!(
+								"{} {} of {} | tx {}:{} (tps: {}, total: {}s)",
+								total_probes,
+								i,
+								txptr.len(),
+								node.pubkey,
+								scid.to_string(),
+								total_probes / elapsed,
+								probe_start.elapsed().as_secs_f64()
+							);
+							total_probes += 1;
 							match probe(
 								&node.pubkey,
 								&scid.to_string(),
@@ -582,12 +671,13 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 								&network_graph,
 								&logger,
 								&ldk_data_dir,
-								&our_payment_state,
+								pending_payments.clone(),
 							) {
 								Ok(_) => continue,
 								Err(_) => continue,
 							}
 						}
+						log_info!(logger, "Probing next node...");
 					}
 				}
 				_ => println!("Unknown command. See `\"help\" for available commands."),
