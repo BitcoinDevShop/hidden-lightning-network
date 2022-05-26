@@ -96,9 +96,17 @@ probeall data/nodes.json data/transactions.json
 - [x] Create special hops
 - [x] Detect difference (programatically) between when we use a real channel and not
 - [x] Write results to the DB
-- [ ] Iterate over a list of UTXOs and see if any are a private channel
-- [x] Should get different error when channel_id is correct but pubkey is wrong (unknown_next_peer)
-      should be PERM|10, instead we're getting PERM|15
+- [x] Iterate over a list of UTXOs and see if any are a private channel
+- [x] Should get different error when channel_id is correct but pubkey is wrong (unknown_next_peer) should be PERM|10, instead we're getting PERM|15
+- [ ] Only apply channel updates onto the channel it is meant for
+- [ ] Resume where it left off
+- [ ] Get a mainnet proxy node setup with a private channel with another node
+- [ ] Update datasets
+- [ ] Run on proxy node looking for a single private channel 
+- [ ] Scrap a list of all public nodes
+- [ ] Scrap a list of all public channels
+- [ ] Filter out public channels from possible private channel list
+- [ ] Run against some other targetted node
 
 # ldk-sample
 
