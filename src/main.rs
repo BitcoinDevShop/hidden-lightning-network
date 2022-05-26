@@ -487,26 +487,38 @@ async fn start_ldk() {
 	let mut channelmonitors = real_persister.read_channelmonitors(keys_manager.clone()).unwrap();
 
 	// Load channel monitor updates from disk as well
+	let channelmonitorupdates = persister.read_channelmonitor_updates().unwrap();
 	for (_, channel_monitor) in channelmonitors.iter_mut() {
-		let mut channelmonitorupdates = persister.read_channelmonitor_updates().unwrap();
-		// sort first
-		channelmonitorupdates.sort_by(|a, b| a.update_id.cmp(&b.update_id));
+		// which utxo is this channel monitoring for?
+		let (channel_output, _) = channel_monitor.get_funding_txo();
+		let channel_updates_res = channelmonitorupdates.get(&channel_output.txid);
+		match channel_updates_res {
+			Some(channel_updates) => {
+				// if we found the channel monitor for this channel update,
+				// apply in order
+				let mut sorted_channel_updates = channel_updates.clone();
+				sorted_channel_updates.sort_by(|a, b| a.update_id.cmp(&b.update_id));
+				for channel_monitor_update in sorted_channel_updates.iter_mut() {
+					println!(
+						"applying update {} for {}",
+						channel_monitor_update.update_id, channel_output.txid
+					);
 
-		for channel_monitor_update in channelmonitorupdates.iter_mut() {
-			println!("applying update: {}", channel_monitor_update.update_id);
-
-			match channel_monitor.update_monitor(
-				channel_monitor_update,
-				&broadcaster,
-				&fee_estimator,
-				&logger,
-			) {
-				Ok(_) => continue,
-				Err(e) => {
-					log_info!(logger, "{:?}", e);
-					return;
+					match channel_monitor.update_monitor(
+						channel_monitor_update,
+						&broadcaster,
+						&fee_estimator,
+						&logger,
+					) {
+						Ok(_) => continue,
+						Err(e) => {
+							log_info!(logger, "{:?}", e);
+							return;
+						}
+					}
 				}
 			}
+			None => continue,
 		}
 	}
 

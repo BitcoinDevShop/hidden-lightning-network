@@ -178,12 +178,14 @@ impl YourPersister {
 	}
 
 	/// Read `ChannelMonitor` updates from disk.
-	pub fn read_channelmonitor_updates(&self) -> Result<Vec<ChannelMonitorUpdate>, std::io::Error> {
+	pub fn read_channelmonitor_updates(
+		&self,
+	) -> Result<HashMap<Txid, Vec<ChannelMonitorUpdate>>, std::io::Error> {
+		let mut tx_id_channel_map = HashMap::new();
 		let path = self.path_to_monitor_data_updates();
 		if !Path::new(&path).exists() {
-			return Ok(Vec::new());
+			return Ok(tx_id_channel_map);
 		}
-		let mut res = Vec::new();
 		for file_option in fs::read_dir(path).unwrap() {
 			let file = file_option.unwrap();
 			let owned_file_name = file.file_name();
@@ -224,7 +226,13 @@ impl YourPersister {
 			let mut buffer = Cursor::new(&contents);
 			match <ChannelMonitorUpdate>::read(&mut buffer) {
 				Ok(channel_monitor_update) => {
-					res.push(channel_monitor_update);
+					// see if we already have this key
+					match tx_id_channel_map.get_mut(&txid.unwrap()) {
+						Some(map) => map.push(channel_monitor_update),
+						None => {
+							tx_id_channel_map.insert(txid.unwrap(), vec![channel_monitor_update]);
+						}
+					}
 				}
 				Err(e) => {
 					return Err(std::io::Error::new(
@@ -234,7 +242,7 @@ impl YourPersister {
 				}
 			}
 		}
-		Ok(res)
+		Ok(tx_id_channel_map)
 	}
 
 	pub(crate) fn save_file(&self) -> Result<(), chain::ChannelMonitorUpdateErr> {

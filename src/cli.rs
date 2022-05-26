@@ -581,7 +581,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					let pubkey_guess =
 						"03b2c32c46e0b4b720c4f45f02a0cc4c5475df7ce4d5b1ab563961b1681c6917d6";
 
-					let mut set_of_attempts: HashSet<String> = HashSet::new();
+					let set_of_attempts: HashSet<String> = HashSet::new();
 
 					// TODO: get a vec of attempts from main.rs and put them in here so we don't redo attempts
 					// set_of_attempts.insert("abcdefg".into());
