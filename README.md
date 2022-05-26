@@ -44,13 +44,13 @@ cargo run --bin scraper ./data/utxodump.csv ./data/iterate.txt
 
 ```
 ALICE p2p
-connectpeer 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768@127.0.0.1:9735
+connectpeer 0258cc6d50ed15d05938261e209e5bee11948eda838d66b5481b3d6e839733cf87@127.0.0.1:9735
 
 bob pubkey
 sendfakepayment 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768
 
 correct channel id, correct pubkey
-probeprivate 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768 03aa4f7f215d551f3bd6e852122d85d0da6b34753ebe03a94b2b7fc092694c6ff5 645413325570048
+probeprivate 0258cc6d50ed15d05938261e209e5bee11948eda838d66b5481b3d6e839733cf87 03aa4f7f215d551f3bd6e852122d85d0da6b34753ebe03a94b2b7fc092694c6ff5 645413325570048
 
 wrong pubkey, correct channel id
 probeprivate 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768 030ac3e942e8407243c62423c7f0d68787ff112b7831c9cd2c7c1639c781591d94 645413325570048
@@ -96,9 +96,17 @@ probeall data/nodes.json data/transactions.json
 - [x] Create special hops
 - [x] Detect difference (programatically) between when we use a real channel and not
 - [x] Write results to the DB
-- [ ] Iterate over a list of UTXOs and see if any are a private channel
-- [x] Should get different error when channel_id is correct but pubkey is wrong (unknown_next_peer)
-      should be PERM|10, instead we're getting PERM|15
+- [x] Iterate over a list of UTXOs and see if any are a private channel
+- [x] Should get different error when channel_id is correct but pubkey is wrong (unknown_next_peer) should be PERM|10, instead we're getting PERM|15
+- [ ] Only apply channel updates onto the channel it is meant for
+- [ ] Resume where it left off
+- [ ] Get a mainnet proxy node setup with a private channel with another node
+- [ ] Update datasets
+- [ ] Run on proxy node looking for a single private channel 
+- [ ] Scrap a list of all public nodes
+- [ ] Scrap a list of all public channels
+- [ ] Filter out public channels from possible private channel list
+- [ ] Run against some other targetted node
 
 # ldk-sample
 

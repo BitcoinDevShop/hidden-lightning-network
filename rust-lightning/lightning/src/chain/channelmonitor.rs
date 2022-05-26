@@ -55,6 +55,7 @@ use ln::chan_utils::{
 use ln::channelmanager::HTLCSource;
 use ln::msgs::DecodeError;
 use ln::{PaymentHash, PaymentPreimage};
+use std::time::{Duration, Instant};
 use util::byte_utils;
 use util::events::Event;
 use util::logger::Logger;
@@ -2142,6 +2143,7 @@ impl<Signer: Sign> ChannelMonitorImpl<Signer> {
 		F::Target: FeeEstimator,
 		L::Target: Logger,
 	{
+		let update_monitor_start = Instant::now();
 		log_info!(
 			logger,
 			"Applying update to monitor {}, bringing update_id from {} to {} with {} changes.",
@@ -2264,6 +2266,15 @@ impl<Signer: Sign> ChannelMonitorImpl<Signer> {
 			}
 		}
 		self.latest_update_id = updates.update_id;
+
+		let update_monitor_elapse = update_monitor_start.elapsed();
+		if update_monitor_elapse.as_secs_f64() > 0.3 {
+			log_warn!(
+				logger,
+				"Processed update monitor in {}s",
+				update_monitor_elapse.as_secs_f64()
+			);
+		}
 
 		if ret.is_ok() && self.funding_spend_seen {
 			log_error!(logger, "Refusing Channel Monitor Update as counterparty attempted to update commitment after funding was spent");
