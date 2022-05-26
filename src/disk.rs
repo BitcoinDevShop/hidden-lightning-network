@@ -32,7 +32,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard};
-use std::time::Instant;
+// use std::time::Instant;
 
 /*
 pub struct YourPersister<ChannelSigner: Sign> {
@@ -335,7 +335,7 @@ impl<ChannelSigner: Sign> chainmonitor::Persist<ChannelSigner> for YourPersister
 				.unwrap();
 		} else {
 			// save the entire manager for block related updates
-			println!("Going to save entire manager file...");
+			// println!("Going to save entire manager file...");
 			let filename = format!("{}_{}", id.txid.to_hex(), id.index);
 			write_to_file(self.path_to_monitor_data(), filename, data)
 				.map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
@@ -390,7 +390,7 @@ impl<ChannelSigner: Sign> chainmonitor::Persist<ChannelSigner> for YourPersister
 pub(crate) fn write_to_file<D: DiskWriteable>(
 	path: PathBuf, filename: String, data: &D,
 ) -> std::io::Result<()> {
-	let now = Instant::now();
+	// let now = Instant::now();
 
 	fs::create_dir_all(path.clone())?;
 	// Do a crazy dance with lots of fsync()s to be overly cautious here...
@@ -419,7 +419,7 @@ pub(crate) fn write_to_file<D: DiskWriteable>(
 		}
 	}
 
-	println!("Writing {} took {}s", filename_with_path, now.elapsed().as_secs_f64());
+	// 	println!("Writing {} took {}s", filename_with_path, now.elapsed().as_secs_f64());
 	Ok(())
 }
 
@@ -469,17 +469,17 @@ impl Logger for FilesystemLogger {
 	}
 }
 pub(crate) fn persist_channel_peer(path: &Path, peer_info: &str) -> std::io::Result<()> {
-	let now = Instant::now();
+	// let now = Instant::now();
 	let mut file = fs::OpenOptions::new().create(true).append(true).open(path)?;
 	std::io::Write::write_all(&mut file, format!("{}\n", peer_info).as_bytes()).unwrap();
-	println!("Writing channel_peer took {}s", now.elapsed().as_secs_f64());
+	// println!("Writing channel_peer took {}s", now.elapsed().as_secs_f64());
 	Ok(())
 }
 
 pub(crate) fn read_channel_peer_data(
 	path: &Path,
 ) -> Result<HashMap<PublicKey, SocketAddr>, std::io::Error> {
-	let now = Instant::now();
+	// let now = Instant::now();
 	let mut peer_data = HashMap::new();
 	if !Path::new(&path).exists() {
 		return Ok(HashMap::new());
@@ -494,12 +494,12 @@ pub(crate) fn read_channel_peer_data(
 			Err(e) => return Err(e),
 		}
 	}
-	println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
+	// println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
 	Ok(peer_data)
 }
 
 pub(crate) fn persist_network(path: &Path, network_graph: &NetworkGraph) -> std::io::Result<()> {
-	let now = Instant::now();
+	// let now = Instant::now();
 	let mut tmp_path = path.to_path_buf().into_os_string();
 	tmp_path.push(".tmp");
 	let file = fs::OpenOptions::new().write(true).create(true).open(&tmp_path)?;
@@ -508,16 +508,16 @@ pub(crate) fn persist_network(path: &Path, network_graph: &NetworkGraph) -> std:
 		let _ = fs::remove_file(&tmp_path);
 		Err(e)
 	} else {
-		println!("Writing network took {}s", now.elapsed().as_secs_f64());
+		// println!("Writing network took {}s", now.elapsed().as_secs_f64());
 		Ok(())
 	}
 }
 
 pub(crate) fn read_network(path: &Path, genesis_hash: BlockHash) -> NetworkGraph {
-	let now = Instant::now();
+	// let now = Instant::now();
 	if let Ok(file) = File::open(path) {
 		if let Ok(graph) = NetworkGraph::read(&mut BufReader::new(file)) {
-			println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
+			// println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
 			return graph;
 		}
 	}
@@ -527,7 +527,7 @@ pub(crate) fn read_network(path: &Path, genesis_hash: BlockHash) -> NetworkGraph
 pub(crate) fn persist_scorer(
 	path: &Path, scorer: &ProbabilisticScorer<Arc<NetworkGraph>>,
 ) -> std::io::Result<()> {
-	let now = Instant::now();
+	// let now = Instant::now();
 	let mut tmp_path = path.to_path_buf().into_os_string();
 	tmp_path.push(".tmp");
 	let file = fs::OpenOptions::new().write(true).create(true).open(&tmp_path)?;
@@ -536,7 +536,7 @@ pub(crate) fn persist_scorer(
 		let _ = fs::remove_file(&tmp_path);
 		Err(e)
 	} else {
-		println!("Writing scorer took {}s", now.elapsed().as_secs_f64());
+		// println!("Writing scorer took {}s", now.elapsed().as_secs_f64());
 		Ok(())
 	}
 }
@@ -544,13 +544,13 @@ pub(crate) fn persist_scorer(
 pub(crate) fn read_scorer(
 	path: &Path, graph: Arc<NetworkGraph>,
 ) -> ProbabilisticScorer<Arc<NetworkGraph>> {
-	let now = Instant::now();
+	// let now = Instant::now();
 	let params = ProbabilisticScoringParameters::default();
 	if let Ok(file) = File::open(path) {
 		if let Ok(scorer) =
 			ProbabilisticScorer::read(&mut BufReader::new(file), (params, Arc::clone(&graph)))
 		{
-			println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
+			// println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
 			return scorer;
 		}
 	}

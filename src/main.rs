@@ -260,6 +260,9 @@ async fn handle_ldk_events(
 			let (last_hop, path) = path.split_last().unwrap();
 			let chan_id = last_hop.short_channel_id;
 			let guessed_node_pubkey = last_hop.pubkey;
+			if path.len() < 1 {
+				return;
+			}
 			let node_pubkey = path.last().unwrap().pubkey;
 
 			if let Some(error_code) = error_code {

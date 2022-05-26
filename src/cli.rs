@@ -602,14 +602,9 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 								if running.load(Ordering::SeqCst) > 0 {
 									break;
 								}
-								/*
-								let pending_outbound_payments =
-									channel_manager.pending_outbound_payments.lock().unwrap();
-																*/
 								let pending_outbound_payments = pending_payments.lock().unwrap();
 								//let mut pending_state = pending_payment_state.lock().unwrap();
 								// Assuming only 1 channel, TODO a better check
-								//if pending_state.keys().len() > 350 {
 								let len = pending_outbound_payments.keys().len();
 								drop(pending_outbound_payments);
 								if len > 450 {
