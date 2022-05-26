@@ -539,6 +539,7 @@ dependencies = [
  "ctrlc",
  "futures",
  "hex",
+ "libc",
  "lightning",
  "lightning-background-processor",
  "lightning-block-sync",

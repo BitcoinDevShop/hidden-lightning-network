@@ -59,12 +59,8 @@ pub(crate) fn probe<E: EventHandler>(
 		next_route_hint,
 	);
 
-	let route = if let Ok(mut route) = route {
+	let route = if let Ok(route) = route {
 		// paths should always be a vec<vec<hops>>
-		let inner = route.paths.first_mut().unwrap();
-
-		// inner.push(next_hop);
-		route.paths = vec![inner.to_owned()];
 		route
 	} else {
 		println!("No route: {:?}", route.err().unwrap());

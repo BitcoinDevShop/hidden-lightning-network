@@ -8,6 +8,7 @@ use std::fs::OpenOptions;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 // use bitcoin::BlockHash;
 use chrono::Utc;
+extern crate libc;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use lightning::chain;
 use lightning::chain::channelmonitor::{ChannelMonitor, ChannelMonitorUpdate};
@@ -15,6 +16,7 @@ use lightning::chain::keysinterface::{KeysInterface, Sign};
 use lightning::chain::transaction::OutPoint;
 use lightning::routing::network_graph::NetworkGraph;
 use lightning::routing::scoring::{ProbabilisticScorer, ProbabilisticScoringParameters};
+use lightning::util;
 use lightning::util::logger::{Logger, Record};
 use lightning::util::ser::{Readable, ReadableArgs, Writeable, Writer};
 use std::collections::HashMap;
@@ -24,6 +26,8 @@ use std::io::Error;
 use std::io::{BufRead, BufReader, BufWriter};
 use std::net::SocketAddr;
 use std::ops::Deref;
+#[cfg(not(target_os = "windows"))]
+use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -43,66 +47,7 @@ pub struct YourPersister {
 	//chan_manager_cache: RwLock<HashMap<OutPoint, MonitorHolder<ChannelSigner>>>,
 	//chan_manager_cache: RwLock<HashMap<OutPoint, ChannelMonitor<ChannelSigner>>>,
 	chan_manager_cache: RwLock<HashMap<OutPoint, Vec<u8>>>,
-}
-
-struct MonitorHolder<ChannelSigner: Sign> {
-	monitor: ChannelMonitor<ChannelSigner>,
-	/// The full set of pending monitor updates for this Channel.
-	///
-	/// Note that this lock must be held during updates to prevent a race where we call
-	/// update_persisted_channel, the user returns a TemporaryFailure, and then calls
-	/// channel_monitor_updated immediately, racing our insertion of the pending update into the
-	/// contained Vec.
-	///
-	/// Beyond the synchronization of updates themselves, we cannot handle user events until after
-	/// any chain updates have been stored on disk. Thus, we scan this list when returning updates
-	/// to the ChannelManager, refusing to return any updates for a ChannelMonitor which is still
-	/// being persisted fully to disk after a chain update.
-	///
-	/// This avoids the possibility of handling, e.g. an on-chain claim, generating a claim monitor
-	/// event, resulting in the relevant ChannelManager generating a PaymentSent event and dropping
-	/// the pending payment entry, and then reloading before the monitor is persisted, resulting in
-	/// the ChannelManager re-adding the same payment entry, before the same block is replayed,
-	/// resulting in a duplicate PaymentSent event.
-	pending_monitor_updates: Mutex<Vec<chainmonitor::MonitorUpdateId>>,
-	/// When the user returns a PermanentFailure error from an update_persisted_channel call during
-	/// block processing, we inform the ChannelManager that the channel should be closed
-	/// asynchronously. In order to ensure no further changes happen before the ChannelManager has
-	/// processed the closure event, we set this to true and return PermanentFailure for any other
-	/// chain::Watch events.
-	channel_perm_failed: AtomicBool,
-	/// The last block height at which no [`UpdateOrigin::ChainSync`] monitor updates were present
-	/// in `pending_monitor_updates`.
-	/// If it's been more than [`LATENCY_GRACE_PERIOD_BLOCKS`] since we started waiting on a chain
-	/// sync event, we let monitor events return to `ChannelManager` because we cannot hold them up
-	/// forever or we'll end up with HTLC preimages waiting to feed back into an upstream channel
-	/// forever, risking funds loss.
-	last_chain_persist_height: AtomicUsize,
-}
-
-impl<ChannelSigner: Sign> MonitorHolder<ChannelSigner> {
-	fn has_pending_offchain_updates(
-		&self, pending_monitor_updates_lock: &MutexGuard<Vec<chainmonitor::MonitorUpdateId>>,
-	) -> bool {
-		pending_monitor_updates_lock.iter().any(|update_id| {
-			if let chainmonitor::UpdateOrigin::OffChain(_) = update_id.contents {
-				true
-			} else {
-				false
-			}
-		})
-	}
-	fn has_pending_chainsync_updates(
-		&self, pending_monitor_updates_lock: &MutexGuard<Vec<chainmonitor::MonitorUpdateId>>,
-	) -> bool {
-		pending_monitor_updates_lock.iter().any(|update_id| {
-			if let chainmonitor::UpdateOrigin::ChainSync(_) = update_id.contents {
-				true
-			} else {
-				false
-			}
-		})
-	}
+	chan_update_cache: RwLock<HashMap<OutPoint, Vec<Vec<u8>>>>,
 }
 
 impl<Signer: Sign> DiskWriteable for ChannelMonitor<Signer> {
@@ -114,22 +59,16 @@ impl<Signer: Sign> DiskWriteable for ChannelMonitor<Signer> {
 	}
 }
 
-/*
-impl<M: Deref, T: Deref, K: Deref, F: Deref, L: Deref> DiskWriteable for ChannelManager
-where
-	M::Target: chain::Watch<InMemorySigner>,
-	T::Target: BroadcasterInterface,
-	K::Target: KeysInterface<Signer = KeysManager>,
-	F::Target: FeeEstimator,
-	L::Target: Logger,
-{
+impl DiskWriteable for ChannelManager {
 	fn write_to_file(&self, writer: &mut fs::File) -> Result<(), std::io::Error> {
 		self.write(writer)
 	}
+	fn write_to_memory<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		self.write(writer)
+	}
 }
-*/
 
-impl DiskWriteable for ChannelManager {
+impl DiskWriteable for ChannelMonitorUpdate {
 	fn write_to_file(&self, writer: &mut fs::File) -> Result<(), std::io::Error> {
 		self.write(writer)
 	}
@@ -142,7 +81,11 @@ impl YourPersister {
 	/// Initialize a new FilesystemPersister and set the path to the individual channels'
 	/// files.
 	pub fn new(path_to_channel_data: String) -> Self {
-		return Self { path_to_channel_data, chan_manager_cache: RwLock::new(HashMap::new()) };
+		return Self {
+			path_to_channel_data,
+			chan_manager_cache: RwLock::new(HashMap::new()),
+			chan_update_cache: RwLock::new(HashMap::new()),
+		};
 	}
 
 	/// Get the directory which was provided when this persister was initialized.
@@ -155,24 +98,11 @@ impl YourPersister {
 		path.push("monitors");
 		path
 	}
-
-	/*
-	/// Writes the provided `ChannelManager` to the path provided at `FilesystemPersister`
-	/// initialization, within a file called "manager".
-	pub fn persist_manager<Signer: Sign, M: Deref, T: Deref, K: Deref, F: Deref, L: Deref>(
-		data_dir: String, manager: &channelmanager::ChannelManager<Signer, M, T, K, F, L>,
-	) -> Result<(), std::io::Error>
-	where
-		M::Target: chain::Watch<Signer>,
-		T::Target: BroadcasterInterface,
-		K::Target: KeysInterface<Signer = Signer>,
-		F::Target: FeeEstimator,
-		L::Target: Logger,
-	{
-		let path = PathBuf::from(data_dir);
-		write_to_file(path, "manager".to_string(), manager)
+	pub(crate) fn path_to_monitor_data_updates(&self) -> PathBuf {
+		let mut path = PathBuf::from(self.path_to_channel_data.clone());
+		path.push("updates");
+		path
 	}
-		*/
 
 	/// Read `ChannelMonitor`s from disk.
 	pub fn read_channelmonitors<Signer: Sign, K: Deref>(
@@ -204,20 +134,21 @@ impl YourPersister {
 				continue;
 			}
 
-			let txid = Txid::from_hex(filename.unwrap().split_at(64).0);
+			let filename_str = filename.unwrap();
+			let filename_vec: Vec<&str> = filename_str.split('_').collect();
+			let txid = Txid::from_hex(filename_vec[0]);
 			if txid.is_err() {
 				return Err(std::io::Error::new(
 					std::io::ErrorKind::InvalidData,
-					"Invalid tx ID in filename",
+					format!("Invalid tx ID in filename {}", filename_vec[0]),
 				));
 			}
 
-			let index: Result<u16, std::num::ParseIntError> =
-				filename.unwrap().split_at(65).1.parse();
+			let index: Result<u16, std::num::ParseIntError> = filename_vec[1].parse();
 			if index.is_err() {
 				return Err(std::io::Error::new(
 					std::io::ErrorKind::InvalidData,
-					"Invalid tx index in filename",
+					format!("Invalid tx index in filename {}", filename_vec[1]),
 				));
 			}
 
@@ -246,22 +177,92 @@ impl YourPersister {
 		Ok(res)
 	}
 
+	/// Read `ChannelMonitor` updates from disk.
+	pub fn read_channelmonitor_updates(&self) -> Result<Vec<ChannelMonitorUpdate>, std::io::Error> {
+		let path = self.path_to_monitor_data_updates();
+		if !Path::new(&path).exists() {
+			return Ok(Vec::new());
+		}
+		let mut res = Vec::new();
+		for file_option in fs::read_dir(path).unwrap() {
+			let file = file_option.unwrap();
+			let owned_file_name = file.file_name();
+			let filename = owned_file_name.to_str();
+			if !filename.is_some() || !filename.unwrap().is_ascii() || filename.unwrap().len() < 65
+			{
+				return Err(std::io::Error::new(
+					std::io::ErrorKind::InvalidData,
+					"Invalid ChannelMonitor file name",
+				));
+			}
+			if filename.unwrap().ends_with(".tmp") {
+				// If we were in the middle of committing an new update and crashed, it should be
+				// safe to ignore the update - we should never have returned to the caller and
+				// irrevocably committed to the new state in any way.
+				continue;
+			}
+
+			let filename_str = filename.unwrap();
+			let filename_vec: Vec<&str> = filename_str.split('_').collect();
+			let txid = Txid::from_hex(filename_vec[0]);
+			if txid.is_err() {
+				return Err(std::io::Error::new(
+					std::io::ErrorKind::InvalidData,
+					format!("Invalid tx ID in filename {}", filename_vec[0]),
+				));
+			}
+
+			let index: Result<u16, std::num::ParseIntError> = filename_vec[1].parse();
+			if index.is_err() {
+				return Err(std::io::Error::new(
+					std::io::ErrorKind::InvalidData,
+					format!("Invalid tx index in filename {}", filename_vec[1]),
+				));
+			}
+
+			let contents = fs::read(&file.path())?;
+			let mut buffer = Cursor::new(&contents);
+			match <ChannelMonitorUpdate>::read(&mut buffer) {
+				Ok(channel_monitor_update) => {
+					res.push(channel_monitor_update);
+				}
+				Err(e) => {
+					return Err(std::io::Error::new(
+						std::io::ErrorKind::InvalidData,
+						format!("Failed to deserialize ChannelMonitorUpdate: {}", e),
+					))
+				}
+			}
+		}
+		Ok(res)
+	}
+
 	pub(crate) fn save_file(&self) -> Result<(), chain::ChannelMonitorUpdateErr> {
-		println!("Going to save file results from cache...");
-		for (k, v) in self.chan_manager_cache.read().unwrap().iter() {
-			fs::create_dir_all(self.path_to_monitor_data().clone()).unwrap();
+		/*
+		for (k, v) in self.chan_update_cache.read().unwrap().iter() {
+			fs::create_dir_all(self.path_to_monitor_data_updates().clone()).unwrap();
 
 			let filename = format!("{}_{}", k.txid.to_hex(), k.index);
-			println!("Going to save for file {}", filename);
 
-			fs::create_dir_all(self.path_to_monitor_data().clone()).unwrap();
-			let filename_with_path = get_full_filepath(self.path_to_monitor_data(), filename);
+			fs::create_dir_all(self.path_to_monitor_data_updates().clone()).unwrap();
+			let filename_with_path =
+				get_full_filepath(self.path_to_monitor_data_updates(), filename);
+			println!("Going to save update file {}", filename_with_path);
 
 			let mut file =
-				OpenOptions::new().create(true).write(true).open(filename_with_path).unwrap();
+				OpenOptions::new().create(true).append(true).open(filename_with_path).unwrap();
 
-			std::io::Write::write_all(&mut file, &v);
+			for update in v.iter() {
+				match std::io::Write::write_all(&mut file, &update) {
+					Ok(_) => continue,
+					Err(e) => {
+						println!("Error saving channel updates {:?}", e);
+						return Err(chain::ChannelMonitorUpdateErr::PermanentFailure);
+					}
+				}
+			}
 		}
+			*/
 		Ok(())
 	}
 }
@@ -271,37 +272,100 @@ impl<ChannelSigner: Sign> chainmonitor::Persist<ChannelSigner> for YourPersister
 		&self, funding_txo: OutPoint, monitor: &ChannelMonitor<ChannelSigner>,
 		_update_id: chainmonitor::MonitorUpdateId,
 	) -> Result<(), chain::ChannelMonitorUpdateErr> {
-		/*
 		let filename = format!("{}_{}", funding_txo.txid.to_hex(), funding_txo.index);
 		write_to_file(self.path_to_monitor_data(), filename, monitor)
-			.map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
-			*/
+			.map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure);
+		// anytime monitor data is written, delete the update dir
+		fs::create_dir_all(self.path_to_monitor_data_updates().clone()).unwrap();
+		fs::remove_dir_all(self.path_to_monitor_data_updates()).unwrap();
+		fs::create_dir(self.path_to_monitor_data_updates()).unwrap();
+		Ok(())
+		/*
 		let data_vec = monitor.encode();
 		self.chan_manager_cache.write().unwrap().insert(funding_txo, data_vec);
 		Ok(())
+						*/
 	}
 
 	fn update_persisted_channel(
 		&self, id: OutPoint, update: &Option<ChannelMonitorUpdate>,
-		data: &ChannelMonitor<ChannelSigner>, update_id: chainmonitor::MonitorUpdateId,
+		data: &ChannelMonitor<ChannelSigner>, _update_id: chainmonitor::MonitorUpdateId,
 	) -> Result<(), chain::ChannelMonitorUpdateErr> {
-		/*
-		let mut c = Cursor::new(Vec::new());
-		let mut c = BufWriter::new(Vec::new());
-		data.write_to_memory(&mut c).map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
-			*/
-		let data_vec = data.encode();
-		self.chan_manager_cache.write().unwrap().insert(id, data_vec);
-		//println!("Added to chan manager cache");
+		if update.is_some() {
+			// only save the updates to a file
+			// caching them, for now..
+			/*
+			let update_vec = update.encode();
+			let mut chan_update_cache_write = self.chan_update_cache.write().unwrap();
+			if let Some(x) = chan_update_cache_write.get_mut(&id) {
+				x.push(update_vec);
+			} else {
+				chan_update_cache_write.insert(id, vec![update_vec]);
+			}
+						*/
+
+			/*
+			fs::create_dir_all(self.path_to_monitor_data_updates().clone()).unwrap();
+
+			let filename =
+				format!("{}_{}_{}", id.txid.to_hex(), id.index, update.clone().unwrap().update_id);
+			println!("Going to save for file {}", filename);
+
+			fs::create_dir_all(self.path_to_monitor_data_updates().clone()).unwrap();
+			let filename_with_path =
+				get_full_filepath(self.path_to_monitor_data_updates(), filename);
+
+			let mut file =
+				OpenOptions::new().create(true).append(true).open(filename_with_path).unwrap();
+
+			match std::io::Write::write_all(&mut file, update) {
+				Ok(_) => println!("wrote file"),
+				Err(e) => {
+					println!("Error saving channel updates {:?}", e);
+					return Err(chain::ChannelMonitorUpdateErr::PermanentFailure);
+				}
+			}
+						*/
+
+			fs::create_dir_all(self.path_to_monitor_data_updates().clone()).unwrap();
+			let filename =
+				format!("{}_{}_{}", id.txid.to_hex(), id.index, update.clone().unwrap().update_id);
+			write_to_file(self.path_to_monitor_data_updates(), filename, &update.clone().unwrap())
+				.map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
+				.unwrap();
+		} else {
+			// save the entire manager for block related updates
+			println!("Going to save entire manager file...");
+			let filename = format!("{}_{}", id.txid.to_hex(), id.index);
+			write_to_file(self.path_to_monitor_data(), filename, data)
+				.map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
+				.unwrap();
+
+			// then delete the updates file since manager includes them
+			self.chan_update_cache.write().unwrap().remove(&id);
+
+			// also delete the update dir
+			// TODO, there could be many
+			/*
+			let update_filename = format!("{}_{}", id.txid.to_hex(), id.index);
+			let update_filename_with_path =
+				get_full_filepath(self.path_to_monitor_data_updates(), update_filename);
+			if Path::new(update_filename_with_path.as_str()).exists() {
+				fs::remove_file(update_filename_with_path);
+			}
+						*/
+
+			fs::create_dir_all(self.path_to_monitor_data_updates().clone()).unwrap();
+			fs::remove_dir_all(self.path_to_monitor_data_updates()).unwrap();
+			fs::create_dir(self.path_to_monitor_data_updates()).unwrap();
+		}
 		Ok(())
 	}
 
 	fn save_file(&self) -> Result<(), chain::ChannelMonitorUpdateErr> {
-		println!("Going to save file results...");
 		/*
-		let mut c = BufWriter::new(Vec::new());
-		write_to_file(self.path_to_monitor_data(), filename, v).unwrap();
-		*/
+		println!("Going to save file results...");
+		// ignore saving the channel manager itself for now, saves automatically
 		for (k, v) in self.chan_manager_cache.read().unwrap().iter() {
 			fs::create_dir_all(self.path_to_monitor_data().clone()).unwrap();
 
@@ -316,21 +380,12 @@ impl<ChannelSigner: Sign> chainmonitor::Persist<ChannelSigner> for YourPersister
 
 			std::io::Write::write_all(&mut file, &v);
 		}
+				*/
+
 		Ok(())
 	}
 }
 
-pub(crate) trait DiskWriteable {
-	fn write_to_file(&self, writer: &mut fs::File) -> Result<(), std::io::Error>;
-	fn write_to_memory<W: Writer>(&self, writer: &mut W) -> Result<(), std::io::Error>;
-}
-
-pub(crate) fn get_full_filepath(mut filepath: PathBuf, filename: String) -> String {
-	filepath.push(filename);
-	filepath.to_str().unwrap().to_string()
-}
-
-/*
 #[allow(bare_trait_objects)]
 pub(crate) fn write_to_file<D: DiskWriteable>(
 	path: PathBuf, filename: String, data: &D,
@@ -357,19 +412,26 @@ pub(crate) fn write_to_file<D: DiskWriteable>(
 	#[cfg(not(target_os = "windows"))]
 	{
 		fs::rename(&tmp_filename, &filename_with_path)?;
-		/*
 		let path = Path::new(&filename_with_path).parent().unwrap();
 		let dir_file = fs::OpenOptions::new().read(true).open(path)?;
 		unsafe {
 			libc::fsync(dir_file.as_raw_fd());
 		}
-				*/
 	}
 
 	println!("Writing {} took {}s", filename_with_path, now.elapsed().as_secs_f64());
 	Ok(())
 }
-*/
+
+pub(crate) trait DiskWriteable {
+	fn write_to_file(&self, writer: &mut fs::File) -> Result<(), std::io::Error>;
+	fn write_to_memory<W: Writer>(&self, writer: &mut W) -> Result<(), std::io::Error>;
+}
+
+pub(crate) fn get_full_filepath(mut filepath: PathBuf, filename: String) -> String {
+	filepath.push(filename);
+	filepath.to_str().unwrap().to_string()
+}
 
 pub(crate) struct FilesystemLogger {
 	data_dir: String,

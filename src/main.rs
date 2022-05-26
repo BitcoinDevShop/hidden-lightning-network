@@ -483,6 +483,30 @@ async fn start_ldk() {
 	// Step 7: Read ChannelMonitor state from disk
 	let mut channelmonitors = real_persister.read_channelmonitors(keys_manager.clone()).unwrap();
 
+	// Load channel monitor updates from disk as well
+	for (_, channel_monitor) in channelmonitors.iter_mut() {
+		let mut channelmonitorupdates = persister.read_channelmonitor_updates().unwrap();
+		// sort first
+		channelmonitorupdates.sort_by(|a, b| a.update_id.cmp(&b.update_id));
+
+		for channel_monitor_update in channelmonitorupdates.iter_mut() {
+			println!("applying update: {}", channel_monitor_update.update_id);
+
+			match channel_monitor.update_monitor(
+				channel_monitor_update,
+				&broadcaster,
+				&fee_estimator,
+				&logger,
+			) {
+				Ok(_) => continue,
+				Err(e) => {
+					log_info!(logger, "{:?}", e);
+					return;
+				}
+			}
+		}
+	}
+
 	// Step 8: Initialize the ChannelManager
 	let mut user_config = UserConfig::default();
 	user_config.peer_channel_config_limits.force_announced_channel_preference = false;
@@ -740,7 +764,7 @@ async fn start_ldk() {
 		scorer.clone(),
 		logger.clone(),
 		event_handler,
-		payment::RetryAttempts(5),
+		payment::RetryAttempts(0),
 	));
 
 	// Step 18: Persist ChannelManager

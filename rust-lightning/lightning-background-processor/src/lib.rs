@@ -225,7 +225,7 @@ impl BackgroundProcessor {
 				net_graph_msg_handler: net_graph_msg_handler.as_ref().map(|t| t.deref()),
 			};
 
-			log_trace!(logger, "Calling ChannelManager's timer_tick_occurred on startup");
+			// log_trace!(logger, "Calling ChannelManager's timer_tick_occurred on startup");
 			channel_manager.timer_tick_occurred();
 
 			let mut last_freshness_call = Instant::now();
@@ -235,7 +235,7 @@ impl BackgroundProcessor {
 
 			loop {
 				let peer_manager_start = Instant::now();
-				log_trace!(logger, "Processing peer events...");
+				// log_trace!(logger, "Processing peer events...");
 				peer_manager.process_events(); // Note that this may block on ChannelManager's locking
 				let peer_manager_elapse = peer_manager_start.elapsed();
 				if peer_manager_elapse.as_secs() > 1 {
@@ -247,7 +247,7 @@ impl BackgroundProcessor {
 				}
 
 				let channel_manager_start = Instant::now();
-				log_trace!(logger, "Processing channel_manager events...");
+				// log_trace!(logger, "Processing channel_manager events...");
 				channel_manager.process_pending_events(&event_handler);
 				let channel_manager_elapse = channel_manager_start.elapsed();
 				if channel_manager_elapse.as_secs() > 1 {
@@ -259,7 +259,7 @@ impl BackgroundProcessor {
 				}
 
 				let chain_manager_start = Instant::now();
-				log_trace!(logger, "Processing chain_manager events...");
+				// log_trace!(logger, "Processing chain_manager events...");
 				chain_monitor.process_pending_events(&event_handler);
 				let chain_manager_elapse = chain_manager_start.elapsed();
 				if chain_manager_elapse.as_secs() > 1 {
