@@ -15,7 +15,6 @@ use lightning::routing::router::{find_route, RouteHint, RouteHintHop};
 use lightning::routing::scoring::{ProbabilisticScorer, ProbabilisticScoringParameters};
 use lightning::util::logger::Logger;
 use lightning::{log_given_level, log_internal, log_trace};
-use std::{thread, time::Duration};
 
 use lightning::util::events::EventHandler;
 use lightning_invoice::payment::Payer;
@@ -23,7 +22,6 @@ use lightning_invoice::payment::Payer;
 use rand::Rng;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::sync::Mutex;
 
 pub(crate) fn probe<E: EventHandler>(
 	pubkey_str: &str, channel_id_str: &str, pubkey_guess: &str, invoice_payer: &InvoicePayer<E>,
@@ -109,14 +107,10 @@ pub(crate) fn find_routes<E: EventHandler>(
 		RouteParameters { payment_params, final_value_msat: 1000, final_cltv_expiry_delta: 40 };
 
 	// Insert the fake hops at the end as route hints
-
 	let first_hops = channel_manager.first_hops();
 
-	// let scorer = TestScorer::new();
-	// let scorer = FixedPenaltyScorer::with_penalty(1);
 	let params = ProbabilisticScoringParameters::default();
 	let scorer = ProbabilisticScorer::new(params, network);
-
 	let route = find_route(
 		&our_node_pubkey,
 		&route_params,

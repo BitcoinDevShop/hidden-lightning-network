@@ -55,7 +55,7 @@ use ln::chan_utils::{
 use ln::channelmanager::HTLCSource;
 use ln::msgs::DecodeError;
 use ln::{PaymentHash, PaymentPreimage};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use util::byte_utils;
 use util::events::Event;
 use util::logger::Logger;

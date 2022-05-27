@@ -155,9 +155,6 @@ pub trait Persist<ChannelSigner: Sign> {
 		&self, channel_id: OutPoint, update: &Option<ChannelMonitorUpdate>,
 		data: &ChannelMonitor<ChannelSigner>, update_id: MonitorUpdateId,
 	) -> Result<(), ChannelMonitorUpdateErr>;
-
-	/// save persisted channel file when ready, kept in memory until then
-	fn save_file(&self) -> Result<(), chain::ChannelMonitorUpdateErr>;
 }
 
 struct MonitorHolder<ChannelSigner: Sign> {

@@ -17,10 +17,9 @@ use bitcoin::secp256k1::Secp256k1;
 use bitcoin_bech32::WitnessProgram;
 use lightning::chain;
 use lightning::chain::chaininterface::{BroadcasterInterface, ConfirmationTarget, FeeEstimator};
-use lightning::chain::chainmonitor::{self, Persist};
+use lightning::chain::chainmonitor;
 use lightning::chain::keysinterface::{InMemorySigner, KeysInterface, KeysManager, Recipient};
 use lightning::chain::{BestBlock, Filter, Watch};
-// use lightning::ln::channelmanager::ChannelManager;
 use lightning::ln::channelmanager::{self, PaymentId};
 use lightning::ln::channelmanager::{
 	ChainParameters, ChannelManagerReadArgs, SimpleArcChannelManager,
@@ -137,7 +136,7 @@ pub type PaymentState = Arc<Mutex<HashMap<PaymentId, Route>>>;
 // pub(crate) type PaymentInfoStorage = Arc<Mutex<HashMap<PaymentHash, PaymentInfo>>>;
 
 async fn handle_ldk_events(
-	pending_payment_state: PaymentState, channel_manager: Arc<ChannelManager>,
+	_pending_payment_state: PaymentState, channel_manager: Arc<ChannelManager>,
 	bitcoind_client: Arc<BitcoindClient>, keys_manager: Arc<KeysManager>,
 	inbound_payments: PaymentInfoStorage, outbound_payments: PaymentInfoStorage,
 	pending_payments: PaymentInfoStorage, network: Network, event: &Event,
@@ -300,7 +299,7 @@ async fn handle_ldk_events(
 					.unwrap();
 			}
 		}
-		Event::PaymentFailed { payment_hash, payment_id, .. } => {
+		Event::PaymentFailed { payment_hash, .. } => {
 			log_debug!(logger,
 				"\nEVENT: Failed to send payment to payment hash {:?}: exhausted payment retry attempts",
 				hex_utils::hex_str(&payment_hash.0)
@@ -872,12 +871,6 @@ async fn start_ldk() {
 
 	// Stop the background processor.
 	background_processor.stop().unwrap();
-	// persister.clone().persist_new_channel();
-	let new_p: Arc<YourPersister> = persister.clone();
-	match new_p.save_file() {
-		Ok(()) => {}
-		Err(_) => {}
-	};
 }
 
 #[tokio::main]
