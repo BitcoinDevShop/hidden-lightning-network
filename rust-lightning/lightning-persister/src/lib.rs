@@ -195,11 +195,6 @@ impl<ChannelSigner: Sign> chainmonitor::Persist<ChannelSigner> for FilesystemPer
 		util::write_to_file(self.path_to_monitor_data(), filename, monitor)
 			.map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
 	}
-
-	fn save_file(&self) -> Result<(), chain::ChannelMonitorUpdateErr> {
-		println!("Going to save file results...");
-		Ok(())
-	}
 }
 
 #[cfg(test)]

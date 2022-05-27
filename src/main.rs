@@ -6,6 +6,7 @@ mod hex_utils;
 mod probe;
 
 use crate::bitcoind_client::BitcoindClient;
+use crate::cli::Attempt;
 use crate::disk::FilesystemLogger;
 use crate::disk::YourPersister;
 use bitcoin::blockdata::constants::genesis_block;
@@ -45,7 +46,6 @@ use lightning_net_tokio::SocketDescriptor;
 use lightning_persister::FilesystemPersister;
 use rand::{thread_rng, Rng};
 use rusqlite::Connection;
-use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt;
@@ -62,14 +62,6 @@ pub(crate) enum HTLCStatus {
 	Pending,
 	Succeeded,
 	Failed,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct Attempt {
-	target_pubkey: String,
-	guess_pubkey: String,
-	channel_id: String,
-	result: String,
 }
 
 pub(crate) struct MillisatAmount(Option<u64>);
@@ -733,6 +725,7 @@ async fn start_ldk() {
 	let payment_state: PaymentState = Arc::new(Mutex::new(HashMap::new()));
 	let payment_state_for_events = payment_state.clone();
 	let event_logger = logger.clone();
+	let db_arc_copy = db_arc.clone();
 	let event_handler = move |event: &Event| {
 		handle.block_on(handle_ldk_events(
 			payment_state_for_events.clone(),
@@ -866,6 +859,7 @@ async fn start_ldk() {
 		network_graph.clone(),
 		logger.clone(),
 		scorer.clone(),
+		db_arc_copy.clone(),
 	)
 	.await;
 

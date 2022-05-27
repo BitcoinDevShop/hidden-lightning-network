@@ -878,10 +878,6 @@ where
 		}
 		pending_monitor_events
 	}
-
-	fn save_file(&self) -> Result<(), chain::ChannelMonitorUpdateErr> {
-		self.persister.save_file()
-	}
 }
 
 impl<ChannelSigner: Sign, C: Deref, T: Deref, F: Deref, L: Deref, P: Deref> events::EventsProvider

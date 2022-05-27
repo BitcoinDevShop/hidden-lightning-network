@@ -299,9 +299,6 @@ pub trait Watch<ChannelSigner: Sign> {
 	/// For details on asynchronous [`ChannelMonitor`] updating and returning
 	/// [`MonitorEvent::UpdateCompleted`] here, see [`ChannelMonitorUpdateErr::TemporaryFailure`].
 	fn release_pending_monitor_events(&self) -> Vec<MonitorEvent>;
-
-	/// save persisted channel file when ready, kept in memory until then
-	fn save_file(&self) -> Result<(), ChannelMonitorUpdateErr>;
 }
 
 /// The `Filter` trait defines behavior for indicating chain activity of interest pertaining to

@@ -15,6 +15,7 @@ use bitcoin::secp256k1::key::PublicKey;
 use ctrlc;
 use lightning::chain::keysinterface::{KeysInterface, KeysManager, Recipient};
 use lightning::ln::channelmanager::PaymentSendFailure;
+use rusqlite::Connection;
 
 use lightning::ln::msgs::NetAddress;
 use lightning::ln::{PaymentHash, PaymentPreimage};
@@ -28,7 +29,6 @@ use lightning_invoice::payment::PaymentError;
 use lightning_invoice::{utils, Currency, Invoice};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::io;
@@ -57,6 +57,14 @@ pub(crate) struct Transaction {
 	block_index: u64,
 	transaction_index: u64,
 	amount: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Attempt {
+	pub(crate) target_pubkey: String,
+	pub(crate) guess_pubkey: String,
+	pub(crate) channel_id: String,
+	pub(crate) result: String,
 }
 
 pub(crate) struct LdkUserInfo {
@@ -178,6 +186,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 	outbound_payments: PaymentInfoStorage, pending_payments: PaymentInfoStorage,
 	ldk_data_dir: String, network: Network, network_graph: Arc<NetworkGraph>,
 	logger: Arc<FilesystemLogger>, _scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
+	db: Arc<Mutex<rusqlite::Connection>>,
 ) {
 	println!("LDK startup successful. To view available commands: \"help\".");
 	println!("LDK logs are available at <your-supplied-ldk-data-dir-path>/.ldk/logs");
@@ -539,7 +548,6 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 							continue;
 						}
 					};
-					println!("{:?}", nodes);
 
 					// Parse tx files
 					let mut txs: Vec<Transaction> = vec![];
@@ -575,16 +583,12 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 							continue;
 						}
 					}
-					// println!("{:?}", txs);
 
 					// This doesn't matter right now so we'll hardcode it
 					let pubkey_guess =
 						"03b2c32c46e0b4b720c4f45f02a0cc4c5475df7ce4d5b1ab563961b1681c6917d6";
 
-					let set_of_attempts: HashSet<String> = HashSet::new();
-
-					// TODO: get a vec of attempts from main.rs and put them in here so we don't redo attempts
-					// set_of_attempts.insert("abcdefg".into());
+					let set_of_attempts = get_attempts(&db.clone().lock().unwrap()).unwrap();
 
 					log_info!(logger, "Starting probing...");
 					let mut total_probes = 1;
@@ -639,6 +643,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 
 							let attempt = format!("{}:{}", node.pubkey, scid.to_string());
 							if set_of_attempts.contains(&attempt) {
+								log_info!(logger, "skipping attempt {}", attempt);
 								continue;
 							}
 
@@ -1036,4 +1041,24 @@ pub(crate) fn parse_peer_info(
 	}
 
 	Ok((pubkey.unwrap(), peer_addr.unwrap().unwrap()))
+}
+
+fn get_attempts(conn: &Connection) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+	let mut stmt = conn.prepare("SELECT * FROM attempt")?;
+	let mut rows = stmt.query([])?;
+
+	let mut attempts = Vec::new();
+	while let Some(row) = rows.next()? {
+		let attempt = Attempt {
+			target_pubkey: row.get(0)?,
+			guess_pubkey: row.get(1)?,
+			channel_id: row.get(2)?,
+			result: row.get(3)?,
+		};
+
+		let attempt_str = format!("{}:{}", attempt.target_pubkey, attempt.channel_id);
+		attempts.push(attempt_str);
+	}
+
+	Ok(attempts)
 }
