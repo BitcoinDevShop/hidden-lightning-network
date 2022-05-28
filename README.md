@@ -85,7 +85,7 @@ probeall assumptions all data/transactions
 - [x] Scrap a list of all public nodes
 - [x] Scrap a list of all public channels
 - [x] Filter out public channels from possible private channel list
-- [ ] If it can't reach a target node, skip the rest of the probes to it
+- [x] If it can't reach a target node, skip the rest of the probes to it
 - [ ] Get a mainnet proxy node setup with a private channel with another node
 - [ ] Update datasets
 - [ ] Run on proxy node looking for a single private channel 

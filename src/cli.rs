@@ -440,7 +440,6 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 
 					if let Ok(route) = route {
 						dbg!(route.paths);
-					// send_fake_payment(route.paths)
 					} else {
 						println!("No route found")
 					}
@@ -614,6 +613,30 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					let probe_start = Instant::now();
 
 					for node in nodes {
+						// first try to see if we can even find normal routes first
+
+						let route = find_routes(
+							&invoice_payer,
+							channel_manager.clone(),
+							&node.pubkey,
+							&network_graph,
+							&logger,
+							ldk_data_dir.clone(),
+							vec![],
+						);
+
+						match route {
+							Ok(_) => (),
+							Err(_) => {
+								log_info!(
+									logger,
+									"No routes to node {}, skipping probes...",
+									&node.pubkey
+								);
+								continue;
+							}
+						}
+
 						let txptr = &txs;
 						for (i, tx) in txptr.into_iter().enumerate() {
 							// check if the program has been requested to
