@@ -80,7 +80,9 @@ pub(crate) fn probe<E: EventHandler>(
 			log_trace!(logger, "sent payment {:?}", payment_id)
 		}
 		Err(e) => {
-			dbg!(e);
+			log_trace!(logger, "error sending probe {:?}", e);
+			state.remove(&payment_hash);
+			return Err("no route")?;
 		}
 	}
 

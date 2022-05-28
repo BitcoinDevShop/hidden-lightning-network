@@ -2,6 +2,7 @@ use crate::disk::FilesystemLogger;
 use crate::hex_utils;
 use crate::probe::{find_routes, probe, scid_from_parts};
 use crate::{disk, PaymentState};
+use std::str;
 use std::time::Instant;
 
 use crate::{
@@ -533,21 +534,35 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						continue;
 					}
 
-					// Parse nodefile
-					let node_data = match fs::read_to_string(nodepath.unwrap()) {
-						Ok(file) => file,
-						Err(e) => {
-							println!("{:?}", e.into_inner().unwrap());
-							continue;
+					// if nodefile is "all" then read from network graph
+					let mut nodes: Vec<Node> = vec![];
+					if nodepath.unwrap() == "all" {
+						for (pubkey, _) in network_graph.read_only().nodes() {
+							println!(
+								"trying to parse pubkey {:?} : {:?}",
+								pubkey,
+								hex::encode(pubkey.as_slice())
+							);
+							let pubkey_str = hex::encode(pubkey.as_slice());
+							nodes.push(Node { pubkey: String::from(pubkey_str) });
 						}
-					};
-					let nodes: Vec<Node> = match serde_json::from_str(&node_data) {
-						Ok(n) => n,
-						Err(e) => {
-							println!("{:?}", e);
-							continue;
-						}
-					};
+					} else {
+						// Parse nodefile
+						let node_data = match fs::read_to_string(nodepath.unwrap()) {
+							Ok(file) => file,
+							Err(e) => {
+								println!("{:?}", e.into_inner().unwrap());
+								continue;
+							}
+						};
+						nodes = match serde_json::from_str(&node_data) {
+							Ok(n) => n,
+							Err(e) => {
+								println!("{:?}", e);
+								continue;
+							}
+						};
+					}
 
 					// Parse tx files
 					let mut txs: Vec<Transaction> = vec![];

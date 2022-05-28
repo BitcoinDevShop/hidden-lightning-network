@@ -60,25 +60,7 @@ probeprivate 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768 
 
 probeall
 probeall assumptions data/nodes.json data/transactions
-```
-
-## Paul's notes
-
-```
-ALICE p2p
-connectpeer 0325ce0cfd53a1015f6e07b0ca188c255ba8677081d477d3c9973a4f0dd62693a3@127.0.0.1:9735
-
-# correct channel id, correct pubkey
-probeprivate 0325ce0cfd53a1015f6e07b0ca188c255ba8677081d477d3c9973a4f0dd62693a3 0264b3ccafeb17e78f470e68e16749dc8d56b18290df410789e07c06fbc6141f6c 139637976793089
-
-# wrong pubkey, correct channel id
-probeprivate 0325ce0cfd53a1015f6e07b0ca188c255ba8677081d477d3c9973a4f0dd62693a3 03aa4f7f215d551f3bd6e852122d85d0da6b34753ebe03a94b2b7fc092694c6ff5 139637976793089
-
-# wrong channel id, correct pubkey
-probeprivate 0325ce0cfd53a1015f6e07b0ca188c255ba8677081d477d3c9973a4f0dd62693a3 0264b3ccafeb17e78f470e68e16749dc8d56b18290df410789e07c06fbc6141f6c 139637976793081
-
-probeall
-probeall data/nodes.json data/transactions.json
+probeall assumptions all data/transactions
 ```
 
 - [x] Lightning Node
@@ -100,9 +82,10 @@ probeall data/nodes.json data/transactions.json
 - [x] Should get different error when channel_id is correct but pubkey is wrong (unknown_next_peer) should be PERM|10, instead we're getting PERM|15
 - [x] Only apply channel updates onto the channel it is meant for
 - [x] Resume where it left off
-- [ ] Scrap a list of all public nodes
+- [x] Scrap a list of all public nodes
 - [ ] Scrap a list of all public channels
 - [ ] Filter out public channels from possible private channel list
+- [ ] If it can't reach a target node, skip the rest of the probes to it
 - [ ] Get a mainnet proxy node setup with a private channel with another node
 - [ ] Update datasets
 - [ ] Run on proxy node looking for a single private channel 
