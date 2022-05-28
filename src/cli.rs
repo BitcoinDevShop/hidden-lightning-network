@@ -564,6 +564,10 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						};
 					}
 
+					// get a list of public channels
+
+					let short_channel_ids = network_graph.read_only().channels().clone();
+
 					// Parse tx files
 					let mut txs: Vec<Transaction> = vec![];
 					let read_res = fs::read_dir(txpath.unwrap());
@@ -655,6 +659,16 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 								tx.block_index,
 								tx.transaction_index,
 							);
+
+							// make sure scid is not in public channel
+							// list
+							match short_channel_ids.get(&scid) {
+								Some(_) => {
+									log_info!(logger, "skipping public chan {}", scid.to_string());
+									continue;
+								}
+								None => (),
+							}
 
 							let attempt = format!("{}:{}", node.pubkey, scid.to_string());
 							if set_of_attempts.contains(&attempt) {

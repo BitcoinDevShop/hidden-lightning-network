@@ -83,8 +83,8 @@ probeall assumptions all data/transactions
 - [x] Only apply channel updates onto the channel it is meant for
 - [x] Resume where it left off
 - [x] Scrap a list of all public nodes
-- [ ] Scrap a list of all public channels
-- [ ] Filter out public channels from possible private channel list
+- [x] Scrap a list of all public channels
+- [x] Filter out public channels from possible private channel list
 - [ ] If it can't reach a target node, skip the rest of the probes to it
 - [ ] Get a mainnet proxy node setup with a private channel with another node
 - [ ] Update datasets
