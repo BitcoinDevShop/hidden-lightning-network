@@ -16,6 +16,7 @@ use bitcoin::hash_types::BlockHash;
 use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::Secp256k1;
 use bitcoin_bech32::WitnessProgram;
+use chrono::Utc;
 use lightning::chain;
 use lightning::chain::chaininterface::{BroadcasterInterface, ConfirmationTarget, FeeEstimator};
 use lightning::chain::chainmonitor;
@@ -45,6 +46,7 @@ use lightning_invoice::utils::DefaultRouter;
 use lightning_net_tokio::SocketDescriptor;
 use lightning_persister::FilesystemPersister;
 use rand::{thread_rng, Rng};
+use rusqlite::params;
 use rusqlite::Connection;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -273,6 +275,7 @@ async fn handle_ldk_events(
 					guess_pubkey: guessed_node_pubkey.to_string(),
 					channel_id: chan_id.to_string(),
 					result: result.to_string(),
+					date_found: Utc::now().naive_utc(),
 				};
 
 				db.clone()
@@ -280,13 +283,14 @@ async fn handle_ldk_events(
 					.unwrap()
 					.execute(
 						"INSERT INTO attempt (
-                                target_pubkey, guess_pubkey, channel_id, result)
-                            VALUES (?1, ?2, ?3, ?4)",
-						[
+                                target_pubkey, guess_pubkey, channel_id, result, date_found)
+                            VALUES (?1, ?2, ?3, ?4, ?5)",
+						params![
 							&attempt.target_pubkey,
 							&attempt.guess_pubkey,
 							&attempt.channel_id,
 							&attempt.result,
+							attempt.date_found,
 						],
 					)
 					.unwrap();
@@ -700,7 +704,8 @@ async fn start_ldk() {
             target_pubkey TEXT,
             guess_pubkey TEXT,
             channel_id TEXT,
-            result TEXT
+            result TEXT,
+            date_found DATETIME
             )",
 			[], // empty list of parameters.
 		)

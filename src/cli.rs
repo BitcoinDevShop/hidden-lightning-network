@@ -13,6 +13,7 @@ use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::Hash;
 use bitcoin::network::constants::Network;
 use bitcoin::secp256k1::key::PublicKey;
+use chrono::NaiveDateTime;
 use ctrlc;
 use lightning::chain::keysinterface::{KeysInterface, KeysManager, Recipient};
 use lightning::ln::channelmanager::PaymentSendFailure;
@@ -67,6 +68,7 @@ pub(crate) struct Attempt {
 	pub(crate) guess_pubkey: String,
 	pub(crate) channel_id: String,
 	pub(crate) result: String,
+	pub(crate) date_found: NaiveDateTime,
 }
 
 pub(crate) struct LdkUserInfo {
@@ -1134,6 +1136,7 @@ fn get_attempts(conn: &Connection) -> Result<HashMap<String, String>, Box<dyn st
 			guess_pubkey: row.get(1)?,
 			channel_id: row.get(2)?,
 			result: row.get(3)?,
+			date_found: row.get(4)?,
 		};
 
 		if attempt.result == "unknown" {
