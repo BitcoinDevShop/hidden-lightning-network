@@ -14245,13 +14245,6 @@
     "amount": 2222
   },
   {
-    "block_height": 516248,
-    "id": "59781f7448d9564af83a74fc7c33b6fd5b5f4355065072223492083f4b41afc9",
-    "block_index": 1403,
-    "transaction_index": 0,
-    "amount": 237928
-  },
-  {
     "block_height": 516249,
     "id": "18b746ff5d82a4d06e682bffce5e7e746373a6d08859f80432ae52143dab6878",
     "block_index": 1105,
@@ -30016,13 +30009,6 @@
     "amount": 54362
   },
   {
-    "block_height": 529154,
-    "id": "5d5d3097f76223d0df5016de5ef44fe63c702a8216d440e9ccc194ad1469c6d7",
-    "block_index": 614,
-    "transaction_index": 1,
-    "amount": 1000000
-  },
-  {
     "block_height": 529184,
     "id": "f33dc4c56a0188e8fb51268c8dc55b2f4b6d46329350588589f50fd028c69e01",
     "block_index": 851,
@@ -33307,13 +33293,6 @@
   },
   {
     "block_height": 533596,
-    "id": "1446bb6b9eef6a2ea26c45102c6e365b374ee9640bbd96c7a853173c2923fd00",
-    "block_index": 1870,
-    "transaction_index": 0,
-    "amount": 892839779
-  },
-  {
-    "block_height": 533596,
     "id": "16b7500a603b4a835061a0e24bd303ab3db7e7944bb5a465dc9b57618e20a7c1",
     "block_index": 1871,
     "transaction_index": 0,
@@ -33332,20 +33311,6 @@
     "block_index": 1873,
     "transaction_index": 1,
     "amount": 500000000
-  },
-  {
-    "block_height": 533596,
-    "id": "db4867e39eef10a4e3c5d3d68352a25af2716345e13ad2cbae4cb17e2d27d9e4",
-    "block_index": 1874,
-    "transaction_index": 0,
-    "amount": 468784205
-  },
-  {
-    "block_height": 533596,
-    "id": "2e22cf22fb2a220674e069bc869fcfc59004400b9ea853621768d0c1bc11dfbd",
-    "block_index": 1875,
-    "transaction_index": 0,
-    "amount": 399999779
   },
   {
     "block_height": 533599,
@@ -37933,13 +37898,6 @@
     "amount": 3957
   },
   {
-    "block_height": 541045,
-    "id": "19b90bccb453e8d99dfde76bccd082ec96b22299cc047ae46ba005c7f0223ad9",
-    "block_index": 1888,
-    "transaction_index": 0,
-    "amount": 400000
-  },
-  {
     "block_height": 541083,
     "id": "2d4d8f630bb87b7a1d41c177367b87087fd244d2b2893cffba5718d5436ffd3b",
     "block_index": 1141,
@@ -38127,13 +38085,6 @@
     "block_index": 1669,
     "transaction_index": 1,
     "amount": 1200000
-  },
-  {
-    "block_height": 541451,
-    "id": "9310d11a8c92edea1b76deb90d7f0c657a6ba30bee72f64c19a05e8dc4915998",
-    "block_index": 234,
-    "transaction_index": 0,
-    "amount": 460000
   },
   {
     "block_height": 541466,
@@ -40369,13 +40320,6 @@
     "amount": 100000
   },
   {
-    "block_height": 544801,
-    "id": "5242471d0a47c302f4375735fe18688219fc0c24d6fd238c8f687f124212a12b",
-    "block_index": 607,
-    "transaction_index": 0,
-    "amount": 810000
-  },
-  {
     "block_height": 544816,
     "id": "74a28ed2e821983d685d2f65f1b8bf4680a8be6333d74a89e28034141fd300f2",
     "block_index": 597,
@@ -41714,27 +41658,6 @@
   },
   {
     "block_height": 547584,
-    "id": "1e6fffb2840da7ac269f6d3df97e6f6528e05c4718a713b815b39a6256825080",
-    "block_index": 1179,
-    "transaction_index": 3,
-    "amount": 50000000
-  },
-  {
-    "block_height": 547584,
-    "id": "1e6fffb2840da7ac269f6d3df97e6f6528e05c4718a713b815b39a6256825080",
-    "block_index": 1179,
-    "transaction_index": 5,
-    "amount": 50000000
-  },
-  {
-    "block_height": 547584,
-    "id": "1e6fffb2840da7ac269f6d3df97e6f6528e05c4718a713b815b39a6256825080",
-    "block_index": 1179,
-    "transaction_index": 7,
-    "amount": 50000000
-  },
-  {
-    "block_height": 547584,
     "id": "90d71b494dc5743ff83e7678eada08a8d8e24defe4b6caed926f1de4237615f7",
     "block_index": 1200,
     "transaction_index": 1,
@@ -41781,13 +41704,6 @@
     "block_index": 2528,
     "transaction_index": 0,
     "amount": 500000
-  },
-  {
-    "block_height": 547743,
-    "id": "853a34f81a8fb64fa621600fb2c0b98acca4d3c8cad7ab21600b3c839f709f05",
-    "block_index": 1733,
-    "transaction_index": 0,
-    "amount": 372100
   },
   {
     "block_height": 547815,
@@ -43975,13 +43891,6 @@
   },
   {
     "block_height": 550329,
-    "id": "c7d6e8341406ec684785034624339b3008c9a998cc2ce5fdfd84e6ac38a781c1",
-    "block_index": 754,
-    "transaction_index": 0,
-    "amount": 900000
-  },
-  {
-    "block_height": 550329,
     "id": "dd2f558c4bd34e82d08a95e202beec188cc85f3314c8677b1dad6c494b39b8c7",
     "block_index": 969,
     "transaction_index": 0,
@@ -44131,13 +44040,6 @@
     "block_height": 550381,
     "id": "c8a064eebed61ed839b59f25a8b03b77231abbaf276bb6a5ec25829b60783cc5",
     "block_index": 835,
-    "transaction_index": 0,
-    "amount": 16777215
-  },
-  {
-    "block_height": 550381,
-    "id": "594bdc3074520af0ebbef9c2b143f7bc69404994bcae16746e7c49f855c05273",
-    "block_index": 840,
     "transaction_index": 0,
     "amount": 16777215
   },
@@ -45227,13 +45129,6 @@
     "amount": 95030
   },
   {
-    "block_height": 551048,
-    "id": "50ee4775d78e71ea5d4587e33870343d837749f64d36c047441f23ee68459e27",
-    "block_index": 1375,
-    "transaction_index": 1,
-    "amount": 1000000
-  },
-  {
     "block_height": 551050,
     "id": "5d0631373305150da84bd4effd3377dbee2f028f39e563278550038eb4206f23",
     "block_index": 689,
@@ -45294,13 +45189,6 @@
     "id": "078b867f2e65174bb858255ba50d3b3561945dafe29526c2aaef65d19110a539",
     "block_index": 1577,
     "transaction_index": 0,
-    "amount": 100000
-  },
-  {
-    "block_height": 551086,
-    "id": "dc2e9f33c76b91b28a5f2eec781af4ec49190c34fc1f8725f328b59a2c3f2846",
-    "block_index": 1578,
-    "transaction_index": 1,
     "amount": 100000
   },
   {
@@ -45633,13 +45521,6 @@
     "amount": 100000
   },
   {
-    "block_height": 551251,
-    "id": "d9d3ee62613d393cfaedb41d95f2cb8f5554bf0c5c1dd62126ee07e3ede993e3",
-    "block_index": 1083,
-    "transaction_index": 0,
-    "amount": 100000
-  },
-  {
     "block_height": 551258,
     "id": "626e26203cf20edeb1fd779b06cf3be5e228c6096a11d566164f847ca741c1e1",
     "block_index": 1289,
@@ -45694,13 +45575,6 @@
     "block_index": 1136,
     "transaction_index": 0,
     "amount": 485030
-  },
-  {
-    "block_height": 551317,
-    "id": "cc297383bcafe0691fef027cf18770f0bdb390d97f568ab9e6cd14ba6ab39c30",
-    "block_index": 603,
-    "transaction_index": 1,
-    "amount": 900000
   },
   {
     "block_height": 551324,
@@ -46214,13 +46088,6 @@
     "amount": 100000
   },
   {
-    "block_height": 551646,
-    "id": "58f0f06a103844370d2e513c33a87d9e8c7f0cb1a239d3690a6a4a0ba4bc172a",
-    "block_index": 1653,
-    "transaction_index": 0,
-    "amount": 300000
-  },
-  {
     "block_height": 551665,
     "id": "1c247e2b962d901be1ff878ce73ceb4db81b13e93654005b11310de604854d2c",
     "block_index": 402,
@@ -46309,13 +46176,6 @@
     "id": "696e0d50fb71cf1b020288fe3119301d799a5591d7d4bb31d785041d9b2da457",
     "block_index": 790,
     "transaction_index": 1,
-    "amount": 300000
-  },
-  {
-    "block_height": 551755,
-    "id": "b91d6d1873533110cf80a98f2c8a8c2125f12b0e3191ccc8144bb6d5c668e10d",
-    "block_index": 2576,
-    "transaction_index": 0,
     "amount": 300000
   },
   {
@@ -46450,13 +46310,6 @@
     "block_index": 1457,
     "transaction_index": 0,
     "amount": 20000
-  },
-  {
-    "block_height": 551830,
-    "id": "13c8c199cc0c0b38f7c41d92bb60e91983c54ac2adbb2cc89c9f7e98e8a6ce2f",
-    "block_index": 1125,
-    "transaction_index": 0,
-    "amount": 284924
   },
   {
     "block_height": 551830,
@@ -47376,20 +47229,6 @@
     "amount": 750000
   },
   {
-    "block_height": 552679,
-    "id": "1c72a99f7ff700aefbb5a13d0e115f4366c331ee1ebfc1a5ce217fd2d2b253f2",
-    "block_index": 555,
-    "transaction_index": 0,
-    "amount": 152153
-  },
-  {
-    "block_height": 552679,
-    "id": "556a603a0466de147dcce04b45dfb81b990d9f89fcdbe09fe0c1238614696302",
-    "block_index": 556,
-    "transaction_index": 0,
-    "amount": 152153
-  },
-  {
     "block_height": 552686,
     "id": "2cb874e5c17a664acbb59d4160c530d6adc28b6131bdef195ad98093f5b262be",
     "block_index": 1167,
@@ -47689,13 +47528,6 @@
     "block_index": 830,
     "transaction_index": 0,
     "amount": 100000
-  },
-  {
-    "block_height": 552960,
-    "id": "d57dcb6af91fb4ac6c9283b7ed1194c26ce668d38bd27a5141e34a11f994d490",
-    "block_index": 1823,
-    "transaction_index": 0,
-    "amount": 800000
   },
   {
     "block_height": 552962,
@@ -50107,13 +49939,6 @@
   },
   {
     "block_height": 554579,
-    "id": "dc7b3c2643b78277e36f8408411b99bbfd410cb3b495aea34916bcc04658cf92",
-    "block_index": 1482,
-    "transaction_index": 0,
-    "amount": 500000
-  },
-  {
-    "block_height": 554579,
     "id": "80adc56c3bd959b73a148fa705cd2e1cd8233c6f5b16f2764b1b35211303e435",
     "block_index": 1483,
     "transaction_index": 0,
@@ -50825,34 +50650,6 @@
     "block_index": 920,
     "transaction_index": 0,
     "amount": 75000
-  },
-  {
-    "block_height": 554824,
-    "id": "d7a01203d2a1f3d6e77f06b2a18aa279d20a77874a5c256753034bc930bf7dce",
-    "block_index": 1219,
-    "transaction_index": 1,
-    "amount": 500000
-  },
-  {
-    "block_height": 554824,
-    "id": "33f72d0566586988782020173ec153dcaf396283f5e61c59f286610cb76d50d5",
-    "block_index": 1220,
-    "transaction_index": 1,
-    "amount": 500000
-  },
-  {
-    "block_height": 554824,
-    "id": "4f83c582845f2851d257ff61f2e893eefcb189f61f620bbec00f0c78476c30f9",
-    "block_index": 1223,
-    "transaction_index": 0,
-    "amount": 500000
-  },
-  {
-    "block_height": 554824,
-    "id": "b1baeeeb9636f7167e9bd045045056b1204c32e5878c17a76f6546f52c97b540",
-    "block_index": 1224,
-    "transaction_index": 0,
-    "amount": 500000
   },
   {
     "block_height": 554828,
@@ -52080,34 +51877,6 @@
     "amount": 100000
   },
   {
-    "block_height": 555620,
-    "id": "a98650480f7c373312f111254b413141a4a5db132d450e6110a5d4d2be19568b",
-    "block_index": 436,
-    "transaction_index": 1,
-    "amount": 1000000
-  },
-  {
-    "block_height": 555620,
-    "id": "c149d1560981921410f1003e736275ffc541055c40cf99ab09706a82f2bda22e",
-    "block_index": 440,
-    "transaction_index": 0,
-    "amount": 1000000
-  },
-  {
-    "block_height": 555620,
-    "id": "bfbdb02ec51fb585c165e0ee6bddf1a4790a9e19a2e595eba4be3e05a27cafcc",
-    "block_index": 444,
-    "transaction_index": 0,
-    "amount": 1000000
-  },
-  {
-    "block_height": 555620,
-    "id": "2a462cf01bfcede52a596e991d4cbdac424a8bc1b465bae4c7cbf5d7759ba8f6",
-    "block_index": 445,
-    "transaction_index": 0,
-    "amount": 1000000
-  },
-  {
     "block_height": 555631,
     "id": "1acae31f49d8c3a7cd84d4b6228e7962378c3e90a825aa85a13f055d243e3eef",
     "block_index": 1877,
@@ -52414,34 +52183,6 @@
     "block_index": 1850,
     "transaction_index": 0,
     "amount": 75000
-  },
-  {
-    "block_height": 555769,
-    "id": "8a70dcbf3f881e02c2df0be235f4df55e6f880af2bc1519030c2ff053a7efde7",
-    "block_index": 1020,
-    "transaction_index": 1,
-    "amount": 599078
-  },
-  {
-    "block_height": 555769,
-    "id": "9734eb0257d8b556f1cb9f21496d3625914588eb4c4dc3b1175c5c4cf31dd5bb",
-    "block_index": 1336,
-    "transaction_index": 0,
-    "amount": 1000000
-  },
-  {
-    "block_height": 555769,
-    "id": "b28aad2959b4354f62337deb7e1f5e438b92de34e3cca6c48300c6f9f13cb89f",
-    "block_index": 1338,
-    "transaction_index": 0,
-    "amount": 999342
-  },
-  {
-    "block_height": 555769,
-    "id": "1c9749f0039982fe83704e9bf87103f6dc31fc363d38a87e14762d81d5cd5e41",
-    "block_index": 1339,
-    "transaction_index": 0,
-    "amount": 599078
   },
   {
     "block_height": 555772,
@@ -52932,13 +52673,6 @@
     "block_index": 904,
     "transaction_index": 1,
     "amount": 37092
-  },
-  {
-    "block_height": 556113,
-    "id": "7325ce537bfda555c90c6608f446f2708da3177b517f039536274f2349043610",
-    "block_index": 2885,
-    "transaction_index": 0,
-    "amount": 142249
   },
   {
     "block_height": 556114,
@@ -53634,13 +53368,6 @@
     "amount": 2000000
   },
   {
-    "block_height": 556607,
-    "id": "5b6bb35dd113b46b766f6ea11fe9e8fd38da735d05b7e337c53e1856c56088b6",
-    "block_index": 867,
-    "transaction_index": 0,
-    "amount": 300000
-  },
-  {
     "block_height": 556619,
     "id": "d83e769bb510d34260f30a2f5e8bb7132e2cf02786c989ef767348887432b696",
     "block_index": 683,
@@ -54187,13 +53914,6 @@
     "amount": 5000000
   },
   {
-    "block_height": 556863,
-    "id": "0f23056818e18c6cbdbc3067a62f43c309ae212ba1ab9161a76456024e3833f0",
-    "block_index": 2675,
-    "transaction_index": 0,
-    "amount": 300000
-  },
-  {
     "block_height": 556876,
     "id": "3907824e91f03a7b4511d21fbaa78611254f77396aeedcb46cb486a7c59eddf3",
     "block_index": 2220,
@@ -54250,13 +53970,6 @@
     "amount": 700000
   },
   {
-    "block_height": 556890,
-    "id": "6556ec8ff5d95272462f66b2312a44bf6d98960ac112ee5cbb0e5dc70514d33e",
-    "block_index": 1770,
-    "transaction_index": 0,
-    "amount": 300000
-  },
-  {
     "block_height": 556893,
     "id": "bf0b23f2d1c9128679d6258972f2ff2e19d6801203d57ca2ec45094e74ef8ca3",
     "block_index": 2588,
@@ -54276,13 +53989,6 @@
     "block_index": 1998,
     "transaction_index": 1,
     "amount": 2000000
-  },
-  {
-    "block_height": 556900,
-    "id": "786562b3f67546a45ae8b23dc952d4daf69523b364f29baf2a21c808b6b7016c",
-    "block_index": 3317,
-    "transaction_index": 0,
-    "amount": 522000
   },
   {
     "block_height": 556902,
@@ -55188,13 +54894,6 @@
     "amount": 16777215
   },
   {
-    "block_height": 557499,
-    "id": "8778903b3607a3145d3789cbdee68c8b8b7ecad6641d81ae0444b101d7af734e",
-    "block_index": 2209,
-    "transaction_index": 0,
-    "amount": 500000
-  },
-  {
     "block_height": 557523,
     "id": "cfc21b88d41fe5011db326b38bedaba3bf635ee1557343fecc9db411a725fc6e",
     "block_index": 1760,
@@ -55508,13 +55207,6 @@
     "block_index": 604,
     "transaction_index": 0,
     "amount": 100000
-  },
-  {
-    "block_height": 557728,
-    "id": "416521fd5bece0ebebc7ce15409ac90204ab7f3e21ff64b11401daf8a538fb05",
-    "block_index": 791,
-    "transaction_index": 0,
-    "amount": 85132
   },
   {
     "block_height": 557728,
@@ -56938,13 +56630,6 @@
     "amount": 5000000
   },
   {
-    "block_height": 558153,
-    "id": "dc4a256e241b648257e5dec90e0226222a3f4f6a726580400541b7221840ca4f",
-    "block_index": 1204,
-    "transaction_index": 0,
-    "amount": 306395
-  },
-  {
     "block_height": 558156,
     "id": "5364da20595f5c665e4f190881bcee7d70d6ad47b77a0e26d12eabae338e5a61",
     "block_index": 812,
@@ -57555,13 +57240,6 @@
   },
   {
     "block_height": 558549,
-    "id": "19662414b1da7134d62f6424d53734df74a65a53117c30c38068d5d57f393a89",
-    "block_index": 366,
-    "transaction_index": 1,
-    "amount": 9000000
-  },
-  {
-    "block_height": 558549,
     "id": "d35506c76e42563a6ed4855df7c34e25ba5e44d2caefb91514ba7834bceefbc0",
     "block_index": 484,
     "transaction_index": 1,
@@ -57615,13 +57293,6 @@
     "block_index": 900,
     "transaction_index": 1,
     "amount": 6656339
-  },
-  {
-    "block_height": 558556,
-    "id": "dd4af84a136e6156273c026547246c8acecb6365016b19c6be91e9d8a658fef3",
-    "block_index": 2412,
-    "transaction_index": 1,
-    "amount": 332438
   },
   {
     "block_height": 558557,
@@ -57769,13 +57440,6 @@
     "block_index": 1327,
     "transaction_index": 0,
     "amount": 5670
-  },
-  {
-    "block_height": 558569,
-    "id": "9666bdbafc921c7a5d15afd0032af05560e79d319e254f9d7e12982bbe4dfeb5",
-    "block_index": 1617,
-    "transaction_index": 1,
-    "amount": 9000000
   },
   {
     "block_height": 558572,
@@ -57981,13 +57645,6 @@
     "amount": 1263078
   },
   {
-    "block_height": 558665,
-    "id": "ccbd06913554c9141385a135a24c7a67183d3fda3e041ced6728fb55343b86e8",
-    "block_index": 2381,
-    "transaction_index": 1,
-    "amount": 300000
-  },
-  {
     "block_height": 558669,
     "id": "4274ed16108e7724d86b6d99a5bbdd02e317da4b477d0143cca165651321a56f",
     "block_index": 3069,
@@ -58098,13 +57755,6 @@
     "block_index": 161,
     "transaction_index": 0,
     "amount": 581287
-  },
-  {
-    "block_height": 558738,
-    "id": "ebd4c2b9e8fe0aa68c851585f83cb3d977a6790c4ca31aabd13ac9bb6829debc",
-    "block_index": 821,
-    "transaction_index": 0,
-    "amount": 249136
   },
   {
     "block_height": 558740,
@@ -58273,13 +57923,6 @@
     "block_index": 1202,
     "transaction_index": 1,
     "amount": 3600000
-  },
-  {
-    "block_height": 558811,
-    "id": "626dcc8d9e8edc9e5336af1abdc8216ab2b42823f7603e2fa2db493ad0099a1c",
-    "block_index": 1994,
-    "transaction_index": 1,
-    "amount": 3000000
   },
   {
     "block_height": 558816,
@@ -58576,13 +58219,6 @@
     "amount": 2000000
   },
   {
-    "block_height": 559009,
-    "id": "203e987be67705607b212ba337d1e8722da9d1ff855a73ae018579642ad549fb",
-    "block_index": 2073,
-    "transaction_index": 0,
-    "amount": 500000
-  },
-  {
     "block_height": 559011,
     "id": "71e09c5dd4a62965841705805dca4b1c6b2654dc0347a17eb7c7124c9c404add",
     "block_index": 2509,
@@ -58819,13 +58455,6 @@
     "block_index": 2588,
     "transaction_index": 0,
     "amount": 500000
-  },
-  {
-    "block_height": 559121,
-    "id": "4f75d1c2827c7060e0967124745c2c94c3ae8e0df47132071d056f607f38e811",
-    "block_index": 2747,
-    "transaction_index": 0,
-    "amount": 335429
   },
   {
     "block_height": 559141,
@@ -60684,13 +60313,6 @@
   },
   {
     "block_height": 560354,
-    "id": "b3b22ff82e4347a7f54831f084bdd1ae9d625542569ed94865d8014f7e83a63e",
-    "block_index": 2871,
-    "transaction_index": 0,
-    "amount": 250000
-  },
-  {
-    "block_height": 560354,
     "id": "ab29a8afcc11210a8264e43f3abcb5686d41f0135635eec19448de79a6ece3d6",
     "block_index": 2874,
     "transaction_index": 0,
@@ -60905,13 +60527,6 @@
     "block_index": 641,
     "transaction_index": 0,
     "amount": 9000000
-  },
-  {
-    "block_height": 560496,
-    "id": "105b05c3f154a6fd34798fbc49c3afaa601ce34c7dfb6cffef22c9c7eca6f51a",
-    "block_index": 1207,
-    "transaction_index": 1,
-    "amount": 3000000
   },
   {
     "block_height": 560497,
@@ -61262,13 +60877,6 @@
     "block_index": 1777,
     "transaction_index": 0,
     "amount": 9000000
-  },
-  {
-    "block_height": 560769,
-    "id": "dc6ff8ee3d507c473b739a05faf1e1234c4d71d28034e193c3853f08fede052b",
-    "block_index": 2190,
-    "transaction_index": 0,
-    "amount": 313000
   },
   {
     "block_height": 560795,
@@ -62685,13 +62293,6 @@
     "amount": 10000
   },
   {
-    "block_height": 561820,
-    "id": "2d45170b8c54684cbc7280bbb9a2c0929fd60fe37a5abbd564ffb205f6f025e0",
-    "block_index": 1798,
-    "transaction_index": 1,
-    "amount": 4000000
-  },
-  {
     "block_height": 561823,
     "id": "c15c535b62f41ea12fad273053a82d418da0cd46f5825538505c3f5e397f5b9d",
     "block_index": 691,
@@ -63110,13 +62711,6 @@
     "block_index": 1799,
     "transaction_index": 0,
     "amount": 301337
-  },
-  {
-    "block_height": 562053,
-    "id": "97e278293d96c517da56112401eb3652f8784c734236553ee76418d93aa94383",
-    "block_index": 2807,
-    "transaction_index": 0,
-    "amount": 300000
   },
   {
     "block_height": 562055,
@@ -64442,13 +64036,6 @@
     "amount": 363366
   },
   {
-    "block_height": 562636,
-    "id": "659c578b74fc95b7243ad8d93310456a111d84ca18ec351a4b1b24ec43847e88",
-    "block_index": 2567,
-    "transaction_index": 1,
-    "amount": 95266
-  },
-  {
     "block_height": 562637,
     "id": "38baf174806e32d9889502d9b9ac5cd75dcf822db357e68d999ff50dd0833fc5",
     "block_index": 600,
@@ -65378,13 +64965,6 @@
     "block_index": 599,
     "transaction_index": 1,
     "amount": 24000
-  },
-  {
-    "block_height": 562943,
-    "id": "2844dc8e626fa66561f708b986524f6f5634a76ce59a72f0879639460a1c30ca",
-    "block_index": 2042,
-    "transaction_index": 1,
-    "amount": 20000
   },
   {
     "block_height": 562949,
@@ -67123,13 +66703,6 @@
     "amount": 339660
   },
   {
-    "block_height": 563651,
-    "id": "f2560091b5b665f62273d490ee4a849c633d12a56c3a8ed376156e7193c2ce7b",
-    "block_index": 1476,
-    "transaction_index": 0,
-    "amount": 4000000
-  },
-  {
     "block_height": 563652,
     "id": "5fc38c2946e0c0f46d99b8efbd98586c4325d6efb979187067766ccf94a0ad54",
     "block_index": 1375,
@@ -68082,13 +67655,6 @@
     "amount": 173770
   },
   {
-    "block_height": 563911,
-    "id": "24e898f4b084c1be0870d88bfc30aa68435792476e744ffdec3dbeeafcb325da",
-    "block_index": 1013,
-    "transaction_index": 1,
-    "amount": 1400000
-  },
-  {
     "block_height": 563912,
     "id": "cfba993b1666d1a8812f170b9923452b6e749e097cb06b6eeb7387b922b8577c",
     "block_index": 1714,
@@ -68773,13 +68339,6 @@
     "block_index": 1834,
     "transaction_index": 0,
     "amount": 38282
-  },
-  {
-    "block_height": 564048,
-    "id": "0ad30db475f3aa4ea91bb3e92e64edab935fb2c1f62588454a8d66e73d0d4ef1",
-    "block_index": 815,
-    "transaction_index": 0,
-    "amount": 100000
   },
   {
     "block_height": 564051,
@@ -69998,5 +69557,446 @@
     "block_index": 1523,
     "transaction_index": 0,
     "amount": 2500000
+  },
+  {
+    "block_height": 564410,
+    "id": "88f7dee13fe272ae3133e2ba55e52450728aaa859a856fc33e3dd56fb01f3744",
+    "block_index": 1441,
+    "transaction_index": 0,
+    "amount": 75000
+  },
+  {
+    "block_height": 564410,
+    "id": "56aa83293b52616a2389793d43f466df44e1ba4995d7aab9ed6e411d5dbf3ee2",
+    "block_index": 1472,
+    "transaction_index": 0,
+    "amount": 382211
+  },
+  {
+    "block_height": 564415,
+    "id": "1cee5df4e254fbe48021e0693278ac53d2b020024017e8b4f488e0028bdd8ffa",
+    "block_index": 275,
+    "transaction_index": 0,
+    "amount": 75000
+  },
+  {
+    "block_height": 564420,
+    "id": "251a256178c8045312c254a59beb3869613f6072938fdc290ab5fee974b7757a",
+    "block_index": 935,
+    "transaction_index": 0,
+    "amount": 75000
+  },
+  {
+    "block_height": 564420,
+    "id": "b14ddfc3857699d71552d832a6c5b70eb12707b29d72988c320755ce199065b1",
+    "block_index": 939,
+    "transaction_index": 0,
+    "amount": 650000
+  },
+  {
+    "block_height": 564421,
+    "id": "72ef86d68c060b2a29b13cb013d79b818c1c7a29c7de2ad8189861b33964ed62",
+    "block_index": 1676,
+    "transaction_index": 1,
+    "amount": 2185000
+  },
+  {
+    "block_height": 564421,
+    "id": "fabfa9f8a0d59d2f4c5ec50fefd41252e95b34cd51d6d5e59c96e9751a852dc8",
+    "block_index": 1677,
+    "transaction_index": 0,
+    "amount": 1500000
+  },
+  {
+    "block_height": 564422,
+    "id": "e5f63eebd63282217153d0a54677327e1d47aaa6045c9061e7610dc038f68769",
+    "block_index": 3252,
+    "transaction_index": 1,
+    "amount": 139695
+  },
+  {
+    "block_height": 564422,
+    "id": "57139c047ec6b29438628decc6e003e5343a19ed04b9e6b8bde3ee169251e4c1",
+    "block_index": 3272,
+    "transaction_index": 0,
+    "amount": 139695
+  },
+  {
+    "block_height": 564425,
+    "id": "ea6fc2cb188daac57ca94d0b82c6d7256292f4a0a6caa17899165f508298c30b",
+    "block_index": 538,
+    "transaction_index": 0,
+    "amount": 872204
+  },
+  {
+    "block_height": 564425,
+    "id": "cb9e2e8400b8485f396fd2de7f5cffa34cb9a18cf834634584ec92b10d8c81dd",
+    "block_index": 2301,
+    "transaction_index": 0,
+    "amount": 75000
+  },
+  {
+    "block_height": 564428,
+    "id": "95242aee050e9b5eb87f6180285154c089c9ff3ac8ea336fd2a5ba2eeda98c86",
+    "block_index": 2698,
+    "transaction_index": 1,
+    "amount": 2000000
+  },
+  {
+    "block_height": 564429,
+    "id": "d022ea66234ea16a7033894089f1a3c23c228c0756d7275e7764ca3d22580319",
+    "block_index": 357,
+    "transaction_index": 0,
+    "amount": 1000
+  },
+  {
+    "block_height": 564429,
+    "id": "985382724e84ef655a73f2af81ea6514782e3cd7f0511b7a3c7af0860b72484d",
+    "block_index": 1483,
+    "transaction_index": 1,
+    "amount": 76418
+  },
+  {
+    "block_height": 564430,
+    "id": "4e26481a4e820e5f8f37e5a7913f4737b0c1152567ee10a3831c91a129c82113",
+    "block_index": 815,
+    "transaction_index": 0,
+    "amount": 3000000
+  },
+  {
+    "block_height": 564434,
+    "id": "8c93fd7dee2689d9fcbaea279cfbd11a6f114a832d7401d967beba5b021a0da4",
+    "block_index": 1300,
+    "transaction_index": 0,
+    "amount": 1250000
+  },
+  {
+    "block_height": 564436,
+    "id": "013fa1ea883dee161477a4d06eabd936feb28bedb02e197a4999eadb09bee3e9",
+    "block_index": 1042,
+    "transaction_index": 0,
+    "amount": 349565
+  },
+  {
+    "block_height": 564440,
+    "id": "c5b584cf4c58de3c8f32dedb959a772713cdee533d33fca4e12f4c44d5cfe5dd",
+    "block_index": 695,
+    "transaction_index": 0,
+    "amount": 1412073
+  },
+  {
+    "block_height": 564441,
+    "id": "c54515714166bb089764229fbc6ca991109c700984cf7213b860fdb6ddf9371d",
+    "block_index": 758,
+    "transaction_index": 0,
+    "amount": 500000
+  },
+  {
+    "block_height": 564447,
+    "id": "de186e3babd17f592b2de677956c5fb5ea1b071ec0ed843b08a02b846472ba45",
+    "block_index": 473,
+    "transaction_index": 1,
+    "amount": 100000
+  },
+  {
+    "block_height": 564454,
+    "id": "a80f0343efc5f152fd0c21bf709b59612e7ff0073946c2c358d169a80b234ba1",
+    "block_index": 510,
+    "transaction_index": 0,
+    "amount": 75000
+  },
+  {
+    "block_height": 564461,
+    "id": "f0122073f0345753db4d8313fdce0f939bcc0bf6f3b303bd34d8c835b83f56ab",
+    "block_index": 549,
+    "transaction_index": 1,
+    "amount": 900000
+  },
+  {
+    "block_height": 564462,
+    "id": "4e55b7d23d7b274d9372c721bd074523634d59079b3f7bd6adfba250d440ccc2",
+    "block_index": 730,
+    "transaction_index": 0,
+    "amount": 75000
+  },
+  {
+    "block_height": 564463,
+    "id": "4eee36f65a609c2668cf298bc857a486c04847141c28afa9c67984e9caccdabf",
+    "block_index": 1026,
+    "transaction_index": 0,
+    "amount": 140000
+  },
+  {
+    "block_height": 564464,
+    "id": "c74fa8386c7f5fc34d86f152f56817900b385fbaa5323fcfeace225d46b3f9db",
+    "block_index": 1847,
+    "transaction_index": 0,
+    "amount": 824444
+  },
+  {
+    "block_height": 564465,
+    "id": "4d8cec7d67209953ba5dc6ece4c12e6e2fdabe782b6a7499c606f62398d10f20",
+    "block_index": 260,
+    "transaction_index": 0,
+    "amount": 75000
+  },
+  {
+    "block_height": 564472,
+    "id": "8f47f12ab0ea40df0772d50a48a8a800d0ba15ba61294af7bf4884d7ec353ef7",
+    "block_index": 318,
+    "transaction_index": 0,
+    "amount": 359373
+  },
+  {
+    "block_height": 564480,
+    "id": "145a61f23eb2c1d21526952808da0b8784b25f7c686e84235207cc986525cb6f",
+    "block_index": 34,
+    "transaction_index": 0,
+    "amount": 51650
+  },
+  {
+    "block_height": 564484,
+    "id": "c8264a60ad72ad9f2c1329bb7426934ca6149040eb8c6187076283a139cb543b",
+    "block_index": 2869,
+    "transaction_index": 1,
+    "amount": 233602
+  },
+  {
+    "block_height": 564489,
+    "id": "a33a70374e2ef67feb751d1edba625ef1b9664c4c2e3b03cf45a80cb8b70c4be",
+    "block_index": 646,
+    "transaction_index": 0,
+    "amount": 30368
+  },
+  {
+    "block_height": 564490,
+    "id": "35e514ec71eeeac1e9c7bcc3ae8e9fef6afff813682371594b680bbde847bbc7",
+    "block_index": 2841,
+    "transaction_index": 1,
+    "amount": 75000
+  },
+  {
+    "block_height": 564490,
+    "id": "cc053f7c5707d9c64ca4f15367f83cfeb0520b8482dc105abb39725762234470",
+    "block_index": 3014,
+    "transaction_index": 0,
+    "amount": 75000
+  },
+  {
+    "block_height": 564495,
+    "id": "24db119e9ea0bed77fea96307a929fdd4dd493d7a86c307d5cd2167c52280777",
+    "block_index": 378,
+    "transaction_index": 0,
+    "amount": 250000
+  },
+  {
+    "block_height": 564496,
+    "id": "393306dba9c59423befef311d982e3e65bbcf9950a2312018af9f70123d4b8f5",
+    "block_index": 802,
+    "transaction_index": 0,
+    "amount": 100000
+  },
+  {
+    "block_height": 564498,
+    "id": "19ca075f610a2ba560501fa021909890eb17c887a9c14e92230628a79188d080",
+    "block_index": 867,
+    "transaction_index": 0,
+    "amount": 192773
+  },
+  {
+    "block_height": 564498,
+    "id": "b2262195cdf88486d6b055999b1ba233550bd4a992d3a8d58396ddf6414adf99",
+    "block_index": 1891,
+    "transaction_index": 0,
+    "amount": 75000
+  },
+  {
+    "block_height": 564508,
+    "id": "a97f1eb5f392fcefbde8e5a5f58cf44bfdf8cad954ee83e8cbcb190f397106d6",
+    "block_index": 1005,
+    "transaction_index": 0,
+    "amount": 100000
+  },
+  {
+    "block_height": 564508,
+    "id": "7f9388de6ac0e5418781b606c9d7b62a7f37596000ac4c1103b356b9d6ede226",
+    "block_index": 1006,
+    "transaction_index": 0,
+    "amount": 100000
+  },
+  {
+    "block_height": 564508,
+    "id": "48a2c428a603c6fc10399c86ae204fca8a06c044c210cc58090a6b785f1742ad",
+    "block_index": 1007,
+    "transaction_index": 0,
+    "amount": 100000
+  },
+  {
+    "block_height": 564512,
+    "id": "cf872b1f77bb092176a96331d78628085550e3f3dcdd24cc60f9d732804b5fb3",
+    "block_index": 1180,
+    "transaction_index": 1,
+    "amount": 362745
+  },
+  {
+    "block_height": 564512,
+    "id": "98837ea07096f9d0192d6d7351a9753ef625527f98dca07e5b4d30d0d1f162e4",
+    "block_index": 1181,
+    "transaction_index": 1,
+    "amount": 331687
+  },
+  {
+    "block_height": 564515,
+    "id": "e383936b88cbfd4f52eb83ce84cd10221b6dd6fbdb51d570d0fddf8e37660012",
+    "block_index": 350,
+    "transaction_index": 0,
+    "amount": 1000000
+  },
+  {
+    "block_height": 564516,
+    "id": "b97f2598df367eb36b0f512b3252ac693284a826423e123a8f225dfa7ee6421c",
+    "block_index": 591,
+    "transaction_index": 0,
+    "amount": 300000
+  },
+  {
+    "block_height": 564524,
+    "id": "5b0b85c9fcb4bf5333fbcd28dc1ec0ec18550e9f69966a61c16a170ca0d18d1f",
+    "block_index": 691,
+    "transaction_index": 0,
+    "amount": 1500000
+  },
+  {
+    "block_height": 564524,
+    "id": "eb377a3c3ad795e3294b7be5064e3d16090141053b2a5506f23d1e9c903612e0",
+    "block_index": 692,
+    "transaction_index": 0,
+    "amount": 1500000
+  },
+  {
+    "block_height": 564524,
+    "id": "3f2c2da56535e77abeb819d71163ae83e1fddcf9e0e4ea429a58b49357cb40a3",
+    "block_index": 694,
+    "transaction_index": 0,
+    "amount": 1500000
+  },
+  {
+    "block_height": 564524,
+    "id": "c1add0fb7609e1165ac8b00bc6e8d3a00751759abf6db5175f2405c493e29642",
+    "block_index": 696,
+    "transaction_index": 0,
+    "amount": 1500000
+  },
+  {
+    "block_height": 564529,
+    "id": "d44d7b8a2cb6c2b366698405bab8a970738db99d409fd4be160c1aaa480419aa",
+    "block_index": 2251,
+    "transaction_index": 0,
+    "amount": 1500000
+  },
+  {
+    "block_height": 564529,
+    "id": "35a98ed6ffaa111dd01bfef6fb0e85b1fab60ae51660d45dd2261dea4b569912",
+    "block_index": 2257,
+    "transaction_index": 0,
+    "amount": 1500000
+  },
+  {
+    "block_height": 564529,
+    "id": "7c75657a0d97784e5b23ef3c7901acfb59bac9393126498b540653673e7f9f8b",
+    "block_index": 2260,
+    "transaction_index": 0,
+    "amount": 1500000
+  },
+  {
+    "block_height": 564529,
+    "id": "c364074d3d82b353ddc525c622f6ab64d586ee8ea3844d47e531a85d4a35e68a",
+    "block_index": 2886,
+    "transaction_index": 0,
+    "amount": 100000
+  },
+  {
+    "block_height": 564531,
+    "id": "5386d30e5c4dd2e814755b31c238bdfc152a0632cde7426a7dd547f7fa2b6975",
+    "block_index": 1075,
+    "transaction_index": 1,
+    "amount": 200000
+  },
+  {
+    "block_height": 564531,
+    "id": "4cda2e0716bd628ef3afb0102685b92eb4a0ad4aac866894d2f1d54404323033",
+    "block_index": 1078,
+    "transaction_index": 0,
+    "amount": 200000
+  },
+  {
+    "block_height": 564531,
+    "id": "a785f1cce8af96b54354519da7b41870d4aa304bf2a7dfda6eea51a7d6926ed4",
+    "block_index": 1683,
+    "transaction_index": 0,
+    "amount": 75000
+  },
+  {
+    "block_height": 564537,
+    "id": "4e3217f3755d90d1811a8eb7d00affbb4e37f83eb1efd5089d88a9d81fddd6b3",
+    "block_index": 1275,
+    "transaction_index": 0,
+    "amount": 20000
+  },
+  {
+    "block_height": 564552,
+    "id": "0d755290e1908cf98bec06a5e3ceb7d59698c6d01999050e9483f330f78cf3c5",
+    "block_index": 1034,
+    "transaction_index": 0,
+    "amount": 1000000
+  },
+  {
+    "block_height": 564552,
+    "id": "8ce4ba40419d59129ad99c4843277df4e45db3e3eb730729ca4efdfe35a771bc",
+    "block_index": 1305,
+    "transaction_index": 0,
+    "amount": 1000000
+  },
+  {
+    "block_height": 564552,
+    "id": "4e2cb50c3984de6245290e9ecc18a0caab2c635609e759b6e44bd58282448ab7",
+    "block_index": 1731,
+    "transaction_index": 0,
+    "amount": 400000
+  },
+  {
+    "block_height": 564553,
+    "id": "16dd64e703fab75f56563c4f719c1bf9e7e2ab67c51710624cb4076f7053a19b",
+    "block_index": 498,
+    "transaction_index": 0,
+    "amount": 400000
+  },
+  {
+    "block_height": 564553,
+    "id": "e924927845239e785ee2ea99c96623f85d9564bc7b3e0acffffc8fff68cbfaf7",
+    "block_index": 499,
+    "transaction_index": 0,
+    "amount": 400000
+  },
+  {
+    "block_height": 564567,
+    "id": "72acbda873d8fbcdc78e5923fd5baabe59620803d4f3d987921d3a2ffe106b9a",
+    "block_index": 1470,
+    "transaction_index": 1,
+    "amount": 200000
+  },
+  {
+    "block_height": 564567,
+    "id": "bc2f510fde6f48b06c28a7b37340b3bc3442782fa5fddbcad2a9990b7df311f5",
+    "block_index": 1486,
+    "transaction_index": 0,
+    "amount": 200000
+  },
+  {
+    "block_height": 564568,
+    "id": "fa293d31d067313b55edfe691f1ab4ca3ae6f1effd87ad3b8be7067e0191bb6e",
+    "block_index": 2919,
+    "transaction_index": 0,
+    "amount": 26326
   }
 ]

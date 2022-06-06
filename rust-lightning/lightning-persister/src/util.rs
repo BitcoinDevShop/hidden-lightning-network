@@ -94,8 +94,6 @@ pub(crate) fn write_to_file<D: DiskWriteable>(
 			});
 		}
 	}
-
-	println!("Writing {} took {}s", filename_with_path, now.elapsed().as_secs_f64());
 	Ok(())
 }
 

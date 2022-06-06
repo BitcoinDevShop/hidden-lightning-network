@@ -90,7 +90,7 @@ fn main() -> Result<()> {
 
 					if found % 10000 == 0 {
 						let writer = BufWriter::new(
-							File::create(format!("./data/transactions-new/part-{}.json", part))
+							File::create(format!("./data/transactions/part-{}.json", part))
 								.unwrap(),
 						);
 						serde_json::to_writer_pretty(writer, &scrape_results).unwrap();
@@ -105,9 +105,8 @@ fn main() -> Result<()> {
 	}
 
 	// At the very end, if there are not any cleared out results, save final file
-	let writer = BufWriter::new(
-		File::create(format!("./data/transactions-new/part-{}.json", part)).unwrap(),
-	);
+	let writer =
+		BufWriter::new(File::create(format!("./data/transactions/part-{}.json", part)).unwrap());
 	serde_json::to_writer_pretty(writer, &scrape_results).unwrap();
 
 	println!("Wrote {} transactions for part {}...", scrape_results.len(), part);

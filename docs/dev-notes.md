@@ -33,7 +33,8 @@ count,txid,vout,height,coinbase,amount,script,type,address
 Get a list of transactions and their block height from this [tool](https://github.com/rustyrussell/bitcoin-iterate). This program is needed to look up transaction id and block height since bitcoin-utxo-dump does not do block height.
 
 ```
-./bitcoin-iterate -q --transaction=%th,%tN --start-hash=0000000000000000015411ca4b35f7b48ecab015b14de5627b647e262ba0ec40 --blockdir=/home/bitcoin/.bitcoin/mainnet/data/blocks > iterate.txt
+# ./bitcoin-iterate -q --transaction=%th,%tN --start-hash=0000000000000000015411ca4b35f7b48ecab015b14de5627b647e262ba0ec40 --blockdir=/home/bitcoin/.bitcoin/mainnet/data/blocks > iterate.txt
+./bitcoin-iterate -q --output=%th,%bN,%bH,%tN,%oN,%ol,%oa --start-hash=0000000000000000015411ca4b35f7b48ecab015b14de5627b647e262ba0ec40 --blockdir=/home/bitcoin/.bitcoin/mainnet/data/blocks > iterate.txt
 ```
 
 example:

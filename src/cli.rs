@@ -17,6 +17,7 @@ use ctrlc;
 use lightning::chain::keysinterface::{KeysInterface, KeysManager, Recipient};
 use lightning::ln::channelmanager::PaymentSendFailure;
 use rusqlite::Connection;
+use std::collections::HashMap;
 
 use lightning::ln::msgs::NetAddress;
 use lightning::ln::{PaymentHash, PaymentPreimage};
@@ -125,6 +126,7 @@ pub(crate) fn parse_startup_args() -> Result<LdkUserInfo, ()> {
 		false => 3,
 	};
 	let network: Network = match env::args().skip(arg_idx).next().as_ref().map(String::as_str) {
+		Some("mainnet") => Network::Bitcoin,
 		Some("testnet") => Network::Testnet,
 		Some("regtest") => Network::Regtest,
 		Some("signet") => Network::Signet,
@@ -694,7 +696,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 							}
 
 							let attempt = format!("{}:{}", node.pubkey, scid.to_string());
-							if set_of_attempts.contains(&attempt) {
+							if set_of_attempts.contains_key(&attempt) {
 								log_info!(logger, "skipping attempt {}", attempt);
 								continue;
 							}
@@ -714,19 +716,26 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 								probe_start.elapsed().as_secs_f64()
 							);
 							total_probes += 1;
-							match probe(
-								&node.pubkey,
-								&scid.to_string(),
-								pubkey_guess,
-								&invoice_payer,
-								channel_manager.clone(),
-								&network_graph,
-								&logger,
-								&ldk_data_dir,
-								pending_payments.clone(),
-							) {
-								Ok(_) => continue,
-								Err(_) => continue,
+							loop {
+								match probe(
+									&node.pubkey,
+									&scid.to_string(),
+									pubkey_guess,
+									&invoice_payer,
+									channel_manager.clone(),
+									&network_graph,
+									&logger,
+									&ldk_data_dir,
+									pending_payments.clone(),
+								) {
+									Ok(_) => break,
+									Err(_) => {
+										// keep probing this
+										// one until it
+										// succeeds
+										continue;
+									}
+								}
 							}
 						}
 						log_info!(logger, "Probing next node...");
@@ -859,14 +868,33 @@ pub(crate) async fn connect_peer_if_necessary(
 	pubkey: PublicKey, peer_addr: SocketAddr, peer_manager: Arc<PeerManager>,
 ) -> Result<(), ()> {
 	for node_pubkey in peer_manager.get_peer_node_ids() {
-		if node_pubkey == pubkey {
+		if node_pubkey == pubkey.clone() {
 			return Ok(());
 		}
 	}
-	let res = do_connect_peer(pubkey, peer_addr, peer_manager).await;
+	let res = do_connect_peer(pubkey.clone(), peer_addr, peer_manager.clone()).await;
 	if res.is_err() {
 		println!("ERROR: failed to connect to peer");
 	}
+
+	let peer_manager_clone = peer_manager.clone();
+	let pubkey_clone = pubkey.clone();
+	let peer_addr_clone = peer_addr.clone();
+	tokio::spawn(async move {
+		let mut interval = tokio::time::interval(Duration::from_secs(10));
+		loop {
+			interval.tick().await;
+			let connected_node_ids = peer_manager_clone.get_peer_node_ids();
+			if !connected_node_ids.contains(&pubkey_clone) {
+				let res =
+					do_connect_peer(pubkey_clone, peer_addr_clone, peer_manager.clone()).await;
+				if res.is_err() {
+					println!("ERROR: failed to connect to peer");
+				}
+			}
+		}
+	});
+
 	res
 }
 
@@ -1095,11 +1123,11 @@ pub(crate) fn parse_peer_info(
 	Ok((pubkey.unwrap(), peer_addr.unwrap().unwrap()))
 }
 
-fn get_attempts(conn: &Connection) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+fn get_attempts(conn: &Connection) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
 	let mut stmt = conn.prepare("SELECT * FROM attempt")?;
 	let mut rows = stmt.query([])?;
 
-	let mut attempts = Vec::new();
+	let mut attempts = HashMap::new();
 	while let Some(row) = rows.next()? {
 		let attempt = Attempt {
 			target_pubkey: row.get(0)?,
@@ -1108,8 +1136,12 @@ fn get_attempts(conn: &Connection) -> Result<Vec<String>, Box<dyn std::error::Er
 			result: row.get(3)?,
 		};
 
+		if attempt.result == "unknown" {
+			continue;
+		}
+
 		let attempt_str = format!("{}:{}", attempt.target_pubkey, attempt.channel_id);
-		attempts.push(attempt_str);
+		attempts.insert(attempt_str, attempt.result);
 	}
 
 	Ok(attempts)

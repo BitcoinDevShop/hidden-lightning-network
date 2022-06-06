@@ -86,10 +86,17 @@ probeall assumptions all data/transactions
 - [x] Scrap a list of all public channels
 - [x] Filter out public channels from possible private channel list
 - [x] If it can't reach a target node, skip the rest of the probes to it
-- [ ] Get a mainnet proxy node setup with a private channel with another node
-- [ ] Update datasets
-- [ ] Run on proxy node looking for a single private channel 
-- [ ] Run against some other targetted node
+- [x] Get a mainnet proxy node setup with a private channel with another node
+- [x] Update datasets
+- [x] Run on proxy node looking for a single private channel 
+- [x] Run against some other targetted node
+- [ ] Find out what % of public channels would fall into the assumption set
+- [ ] Write up how combining parallel channel probing could work
+- [ ] Retry payments if error is retriable and not what I'm looking for
+- [ ] Work with multiple channels and multiple paths to increase speed
+- [ ] Dump the results 
+- [ ] Run through found channels to find the other node
+
 
 # ldk-sample
 

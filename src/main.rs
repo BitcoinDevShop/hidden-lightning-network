@@ -258,10 +258,11 @@ async fn handle_ldk_events(
 
 			if let Some(error_code) = error_code {
 				let result = match error_code {
-					0x400f => "incorrect_or_unknown_payment_details",
-					0x100c => "fee_insufficient",
-					0xc005 => "invalid_onion_hmac",
-					0x400a => "unknown_next_peer",
+					0x400f => "incorrect_or_unknown_payment_details", // bingo
+					0x100c => "fee_insufficient",                     // channel found, wrong fee
+					0xc005 => "invalid_onion_hmac",                   // channel found, wrong node
+					0x100d => "incorrect_cltv_expiry",                // channel found, wrong cltv
+					0x400a => "unknown_next_peer",                    // no channel found
 					_ => "unknown",
 				};
 

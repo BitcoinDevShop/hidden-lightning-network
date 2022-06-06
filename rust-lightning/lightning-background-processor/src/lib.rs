@@ -25,6 +25,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
+use std::time::Duration;
 use std::time::Instant;
 
 /// `BackgroundProcessor` takes care of tasks that (1) need to happen periodically to keep
@@ -279,7 +280,6 @@ impl BackgroundProcessor {
 
 				// We wait up to 100ms, but track how long it takes to detect being put to sleep,
 				// see `await_start`'s use below.
-				/*
 				let await_start = Instant::now();
 				let updates_available =
 					channel_manager.await_persistable_update_timeout(Duration::from_millis(100));
@@ -298,7 +298,6 @@ impl BackgroundProcessor {
 						);
 					}
 				}
-								*/
 				// Exit the loop if the background processor was requested to stop.
 				if stop_thread.load(Ordering::Acquire) == true {
 					log_trace!(logger, "Terminating background processor.");
@@ -310,7 +309,6 @@ impl BackgroundProcessor {
 					last_freshness_call = Instant::now();
 				}
 
-				/*
 				if await_time > Duration::from_secs(1) {
 					// On various platforms, we may be starved of CPU cycles for several reasons.
 					// E.g. on iOS, if we've been in the background, we will be entirely paused.
@@ -327,9 +325,7 @@ impl BackgroundProcessor {
 					log_trace!(logger, "100ms sleep took more than a second, disconnecting peers.");
 					peer_manager.disconnect_all_peers();
 					last_ping_call = Instant::now();
-				} */
-				/*else*/
-				if last_ping_call.elapsed().as_secs() > PING_TIMER {
+				} else if last_ping_call.elapsed().as_secs() > PING_TIMER {
 					log_trace!(logger, "Calling PeerManager's timer_tick_occurred");
 					peer_manager.timer_tick_occurred();
 					last_ping_call = Instant::now();

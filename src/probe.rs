@@ -43,7 +43,7 @@ pub(crate) fn probe<E: EventHandler>(
 		src_node_id: source_pubkey, // the source
 		short_channel_id: channel_id.unwrap(),
 		fees: guessed_fee,
-		cltv_expiry_delta: 40,
+		cltv_expiry_delta: 40, // the most common cltv
 		htlc_minimum_msat: None,
 		htlc_maximum_msat: None,
 	}])];
@@ -61,6 +61,8 @@ pub(crate) fn probe<E: EventHandler>(
 		// paths should always be a vec<vec<hops>>
 		route
 	} else {
+		// if no routes found, check to make sure we are still
+		// connected to our node
 		println!("No route: {:?}", route.err().unwrap());
 		return Err("no route")?;
 	};
@@ -112,6 +114,7 @@ pub(crate) fn find_routes<E: EventHandler>(
 	let first_hops = channel_manager.first_hops();
 
 	let params = ProbabilisticScoringParameters::default();
+	// params.liquidity_penalty_multiplier_msat = 100_000;
 	let scorer = ProbabilisticScorer::new(params, network);
 	let route = find_route(
 		&our_node_pubkey,
@@ -125,6 +128,33 @@ pub(crate) fn find_routes<E: EventHandler>(
 	route
 }
 
+/// Maximum block height that can be used in a `short_channel_id`. This
+/// value is based on the 3-bytes available for block height.
+pub const MAX_SCID_BLOCK: u64 = 0x00ffffff;
+
+/// Maximum transaction index that can be used in a `short_channel_id`.
+/// This value is based on the 3-bytes available for tx index.
+pub const MAX_SCID_TX_INDEX: u64 = 0x00ffffff;
+
+/// Maximum vout index that can be used in a `short_channel_id`. This
+/// value is based on the 2-bytes available for the vout index.
+pub const MAX_SCID_VOUT_INDEX: u64 = 0xffff;
+
 pub fn scid_from_parts(block: u64, tx_index: u64, vout_index: u64) -> u64 {
 	(block << 40) | (tx_index << 16) | vout_index
+}
+
+/// Extracts the block height (most significant 3-bytes) from the `short_channel_id`
+pub fn block_from_scid(short_channel_id: &u64) -> u32 {
+	return (short_channel_id >> 40) as u32;
+}
+
+/// Extracts the tx index (bytes [2..4]) from the `short_channel_id`
+pub fn tx_index_from_scid(short_channel_id: &u64) -> u32 {
+	return ((short_channel_id >> 16) & MAX_SCID_TX_INDEX) as u32;
+}
+
+/// Extracts the vout (bytes [0..2]) from the `short_channel_id`
+pub fn vout_from_scid(short_channel_id: &u64) -> u16 {
+	return ((short_channel_id) & MAX_SCID_VOUT_INDEX) as u16;
 }
