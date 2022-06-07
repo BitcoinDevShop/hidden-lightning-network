@@ -1,9 +1,11 @@
 use crate::disk::FilesystemLogger;
 use crate::hex_utils;
-use crate::probe::{find_routes, probe, scid_from_parts};
+use crate::probe::{block_from_scid, find_routes, probe, scid_from_parts, vout_from_scid};
 use crate::{disk, PaymentState};
+use anyhow::Result;
 use std::str;
 use std::time::Instant;
+use std::{fs::File, io::BufWriter};
 
 use crate::{
 	ChannelManager, HTLCStatus, InvoicePayer, MillisatAmount, PaymentInfo, PaymentInfoStorage,
@@ -68,6 +70,17 @@ pub(crate) struct Attempt {
 	pub(crate) guess_pubkey: String,
 	pub(crate) channel_id: String,
 	pub(crate) result: String,
+	pub(crate) date_found: NaiveDateTime,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct AttemptResult {
+	pub(crate) target_pubkey: String,
+	pub(crate) other_pubkey: String,
+	pub(crate) channel_id: String,
+	pub(crate) transaction_id_output: String,
+	pub(crate) amount: u64,
+	pub(crate) block_open: u32,
 	pub(crate) date_found: NaiveDateTime,
 }
 
@@ -610,7 +623,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 					let pubkey_guess =
 						"03b2c32c46e0b4b720c4f45f02a0cc4c5475df7ce4d5b1ab563961b1681c6917d6";
 
-					let set_of_attempts = get_attempts(&db.clone().lock().unwrap()).unwrap();
+					let set_of_attempts = get_attempts_str(&db.clone().lock().unwrap()).unwrap();
 
 					log_info!(logger, "Starting probing...");
 					let mut total_probes = 1;
@@ -742,6 +755,102 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						}
 						log_info!(logger, "Probing next node...");
 					}
+				}
+				"dump_results" => {
+					let result_dir = words.next();
+					let txpath = words.next();
+
+					if result_dir.is_none() || txpath.is_none() {
+						println!(
+							"ERROR: dump_results requires result_dir tx_dir: `dump_results <result_dir> <tx_dir>`"
+						);
+						continue;
+					}
+
+					// Parse tx files
+					let mut txs: HashMap<u64, Transaction> = HashMap::new();
+					let read_res = fs::read_dir(txpath.unwrap());
+					match read_res {
+						Ok(txdir) => {
+							for json_file in txdir {
+								println!(
+									"Reading tx file: {:?}",
+									json_file.as_ref().unwrap().file_name().as_os_str().to_str()
+								);
+								let tx_data = match fs::read_to_string(json_file.unwrap().path()) {
+									Ok(file) => file,
+									Err(e) => {
+										println!("{:?}", e.into_inner().unwrap());
+										continue;
+									}
+								};
+								let new_txs: Vec<Transaction> = match serde_json::from_str(&tx_data)
+								{
+									Ok(n) => n,
+									Err(e) => {
+										println!("{:?}", e);
+										continue;
+									}
+								};
+								for tx in new_txs {
+									let scid = scid_from_parts(
+										tx.block_height,
+										tx.block_index,
+										tx.transaction_index,
+									);
+									txs.insert(scid, tx);
+								}
+							}
+						}
+						Err(e) => {
+							println!("{:?}", e.into_inner().unwrap());
+							continue;
+						}
+					}
+
+					let attempts = get_attempts_found(&db.clone().lock().unwrap()).unwrap();
+					let mut results: Vec<AttemptResult> = vec![];
+					for attempt in attempts {
+						let mut result = AttemptResult {
+							target_pubkey: attempt.target_pubkey,
+							other_pubkey: "".to_string(),
+							channel_id: attempt.channel_id.clone(),
+							transaction_id_output: "".to_string(),
+							amount: 0,
+							block_open: block_from_scid(
+								&attempt.channel_id.parse::<u64>().unwrap().clone(),
+							),
+							date_found: attempt.date_found,
+						};
+
+						let output_index =
+							vout_from_scid(&attempt.channel_id.parse::<u64>().unwrap().clone());
+
+						// go through tx set and find txid and amount
+						let tx = txs.get(&attempt.channel_id.parse::<u64>().unwrap().clone());
+						match tx {
+							Some(utxo) => {
+								result.transaction_id_output =
+									format!("{}:{}", utxo.id, output_index);
+								result.amount = utxo.amount;
+							}
+							None => {
+								// TODO if not found in this set (bc spent), do an
+								// electrum lookup?
+							}
+						}
+
+						if attempt.result == "incorrect_or_unknown_payment_details" {
+							result.other_pubkey = attempt.guess_pubkey;
+						}
+
+						results.push(result);
+					}
+
+					let writer = BufWriter::new(
+						File::create(format!("{}/results.json", result_dir.unwrap())).unwrap(),
+					);
+					serde_json::to_writer_pretty(writer, &results).unwrap();
 				}
 				_ => println!("Unknown command. See `\"help\" for available commands."),
 			}
@@ -1125,7 +1234,33 @@ pub(crate) fn parse_peer_info(
 	Ok((pubkey.unwrap(), peer_addr.unwrap().unwrap()))
 }
 
-fn get_attempts(conn: &Connection) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+fn get_attempts_found(conn: &Connection) -> Result<Vec<Attempt>, Box<dyn std::error::Error>> {
+	let mut stmt = conn.prepare("SELECT * FROM attempt")?;
+	let mut rows = stmt.query([])?;
+
+	let mut attempts = vec![];
+	while let Some(row) = rows.next()? {
+		let attempt = Attempt {
+			target_pubkey: row.get(0)?,
+			guess_pubkey: row.get(1)?,
+			channel_id: row.get(2)?,
+			result: row.get(3)?,
+			date_found: row.get(4)?,
+		};
+
+		if attempt.result == "unknown" || attempt.result == "unknown_next_peer" {
+			continue;
+		}
+
+		attempts.push(attempt);
+	}
+
+	Ok(attempts)
+}
+
+fn get_attempts_str(
+	conn: &Connection,
+) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
 	let mut stmt = conn.prepare("SELECT * FROM attempt")?;
 	let mut rows = stmt.query([])?;
 

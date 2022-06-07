@@ -50,7 +50,7 @@ bob pubkey
 sendfakepayment 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768
 
 correct channel id, correct pubkey
-probeprivate 0258cc6d50ed15d05938261e209e5bee11948eda838d66b5481b3d6e839733cf87 03aa4f7f215d551f3bd6e852122d85d0da6b34753ebe03a94b2b7fc092694c6ff5 645413325570048
+probeprivate 0258cc6d50ed15d05938261e209e5bee11948eda838d66b5481b3d6e839733cf87 03aa4f7f215d551f3bd6e852122d85d0da6b34753ebe03a94b2b7fc092694c6ff5 4460718673952768
 
 wrong pubkey, correct channel id
 probeprivate 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768 030ac3e942e8407243c62423c7f0d68787ff112b7831c9cd2c7c1639c781591d94 645413325570048
@@ -61,6 +61,9 @@ probeprivate 0231014817072d627ef0772b5212e73a8f32190e1bad485418938e093f0f479768 
 probeall
 probeall assumptions data/nodes.json data/transactions
 probeall assumptions all data/transactions
+
+dump_results
+dump_results data/results data/transactions
 ```
 
 - [x] Lightning Node
@@ -94,7 +97,7 @@ probeall assumptions all data/transactions
 - [ ] Write up how combining parallel channel probing could work
 - [ ] Retry payments if error is retriable and not what I'm looking for
 - [ ] Work with multiple channels and multiple paths to increase speed
-- [ ] Dump the results 
+- [x] Dump the results 
 - [ ] Run through found channels to find the other node
 
 
