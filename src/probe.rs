@@ -14,7 +14,7 @@ use lightning::routing::router::RouteParameters;
 use lightning::routing::router::{find_route, RouteHint, RouteHintHop};
 use lightning::routing::scoring::{ProbabilisticScorer, ProbabilisticScoringParameters};
 use lightning::util::logger::Logger;
-use lightning::{log_given_level, log_internal, log_trace};
+use lightning::{log_given_level, log_info, log_internal, log_trace, log_warn};
 
 use lightning::util::events::EventHandler;
 use lightning_invoice::payment::Payer;
@@ -82,7 +82,7 @@ pub(crate) fn probe<E: EventHandler>(
 			log_trace!(logger, "sent payment {:?}", payment_id)
 		}
 		Err(e) => {
-			log_trace!(logger, "error sending probe {:?}", e);
+			log_warn!(logger, "error sending probe {:?}", e);
 			state.remove(&payment_hash);
 			return Err("no route")?;
 		}

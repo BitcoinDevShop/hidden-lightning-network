@@ -673,7 +673,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 								if len > 450 {
 									// wait for pending htlc's to clear
 									log_trace!(logger, "Close to max htlc's, waiting...");
-									thread::sleep(Duration::from_millis(10));
+									thread::sleep(Duration::from_millis(50));
 									continue;
 								}
 								break;
@@ -748,6 +748,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 										// keep probing this
 										// one until it
 										// succeeds
+										thread::sleep(Duration::from_millis(100));
 										continue;
 									}
 								}

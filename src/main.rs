@@ -264,6 +264,7 @@ async fn handle_ldk_events(
 					0x100c => "fee_insufficient",                     // channel found, wrong fee
 					0xc005 => "invalid_onion_hmac",                   // channel found, wrong node
 					0x100d => "incorrect_cltv_expiry",                // channel found, wrong cltv
+					0x100b => "amount_below_minimum",                 // channel found, amount below minimum
 					0x400a => "unknown_next_peer",                    // no channel found
 					_ => "unknown",
 				};
@@ -797,6 +798,7 @@ async fn start_ldk() {
 	);
 
 	// Regularly reconnect to channel peers.
+	/*
 	let connect_cm = Arc::clone(&channel_manager);
 	let connect_pm = Arc::clone(&peer_manager);
 	let peer_data_path = format!("{}/channel_peer_data", ldk_data_dir.clone());
@@ -829,11 +831,13 @@ async fn start_ldk() {
 			}
 		}
 	});
+		*/
 
 	// Regularly broadcast our node_announcement. This is only required (or possible) if we have
 	// some public channels, and is only useful if we have public listen address(es) to announce.
 	// In a production environment, this should occur only after the announcement of new channels
 	// to avoid churn in the global network graph.
+	/*
 	let chan_manager = Arc::clone(&channel_manager);
 	let network = args.network;
 	if !args.ldk_announced_listen_addr.is_empty() {
@@ -849,6 +853,7 @@ async fn start_ldk() {
 			}
 		});
 	}
+		*/
 
 	// Start the CLI.
 	cli::poll_for_user_input(
