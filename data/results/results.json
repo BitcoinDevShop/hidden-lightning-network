@@ -1,23 +1,5 @@
 [
   {
-    "target_pubkey": "03a21ed10769e4ba7f614043d5eb4d2f1acb2b7032f1a9dedbccd38f6352668ce5",
-    "other_pubkey": "",
-    "channel_id": "811831007524552705",
-    "transaction_id_output": "890127e2ab3a2ac26083456f134a653cc9387fc40fe3592d3d41d65c1ec140ff:1",
-    "amount": 100000,
-    "block_open": 738356,
-    "date_found": "2022-06-06T21:38:11.758070201"
-  },
-  {
-    "target_pubkey": "03a21ed10769e4ba7f614043d5eb4d2f1acb2b7032f1a9dedbccd38f6352668ce5",
-    "other_pubkey": "",
-    "channel_id": "811836505053134849",
-    "transaction_id_output": "cc72107c9ed65ff04f3eb062d3dbf0e9f73da57863de300e9dc477d764d14276:1",
-    "amount": 50000,
-    "block_open": 738361,
-    "date_found": "2022-06-06T21:38:11.758070201"
-  },
-  {
     "target_pubkey": "0242a4ae0c5bef18048fbecf995094b74bfb0f7391418d71ed394784373f41e4f3",
     "other_pubkey": "",
     "channel_id": "760542088613330945",
