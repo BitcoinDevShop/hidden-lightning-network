@@ -619,6 +619,10 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						}
 					}
 
+					// sort the transaction with recent (highest number) blocks
+					log_info!(logger, "sorting transactions by height");
+					txs.sort_by(|a, b| b.block_height.cmp(&a.block_height));
+
 					// This doesn't matter right now so we'll hardcode it
 					let pubkey_guess =
 						"03b2c32c46e0b4b720c4f45f02a0cc4c5475df7ce4d5b1ab563961b1681c6917d6";
