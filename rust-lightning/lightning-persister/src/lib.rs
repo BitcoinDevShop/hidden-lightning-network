@@ -2,31 +2,26 @@
 
 #![deny(broken_intra_doc_links)]
 #![deny(missing_docs)]
+
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
 #![cfg_attr(all(test, feature = "_bench_unstable"), feature(test))]
-#[cfg(all(test, feature = "_bench_unstable"))]
-extern crate test;
+#[cfg(all(test, feature = "_bench_unstable"))] extern crate test;
 
 mod util;
 
+extern crate lightning;
 extern crate bitcoin;
 extern crate libc;
-extern crate lightning;
 
-use crate::util::DiskWriteable;
 use bitcoin::hash_types::{BlockHash, Txid};
-use bitcoin::hashes::hex::{FromHex, ToHex};
-use lightning::chain;
-use lightning::chain::chaininterface::{BroadcasterInterface, FeeEstimator};
-use lightning::chain::chainmonitor;
-use lightning::chain::channelmonitor::{ChannelMonitor, ChannelMonitorUpdate};
-use lightning::chain::keysinterface::{KeysInterface, Sign};
-use lightning::chain::transaction::OutPoint;
-use lightning::ln::channelmanager::ChannelManager;
-use lightning::util::logger::Logger;
+use bitcoin::hashes::hex::FromHex;
+use lightning::chain::channelmonitor::ChannelMonitor;
+use lightning::chain::keysinterface::{Sign, KeysInterface};
 use lightning::util::ser::{ReadableArgs, Writeable};
+use lightning::util::persist::KVStorePersister;
 use std::fs;
-use std::io::{Cursor, Error};
+use std::io::Cursor;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
@@ -46,31 +41,13 @@ pub struct FilesystemPersister {
 	path_to_channel_data: String,
 }
 
-impl<Signer: Sign> DiskWriteable for ChannelMonitor<Signer> {
-	fn write_to_file(&self, writer: &mut fs::File) -> Result<(), Error> {
-		self.write(writer)
-	}
-}
-
-impl<Signer: Sign, M: Deref, T: Deref, K: Deref, F: Deref, L: Deref> DiskWriteable
-	for ChannelManager<Signer, M, T, K, F, L>
-where
-	M::Target: chain::Watch<Signer>,
-	T::Target: BroadcasterInterface,
-	K::Target: KeysInterface<Signer = Signer>,
-	F::Target: FeeEstimator,
-	L::Target: Logger,
-{
-	fn write_to_file(&self, writer: &mut fs::File) -> Result<(), std::io::Error> {
-		self.write(writer)
-	}
-}
-
 impl FilesystemPersister {
 	/// Initialize a new FilesystemPersister and set the path to the individual channels'
 	/// files.
 	pub fn new(path_to_channel_data: String) -> Self {
-		return Self { path_to_channel_data };
+		return Self {
+			path_to_channel_data,
+		}
 	}
 
 	/// Get the directory which was provided when this persister was initialized.
@@ -78,36 +55,14 @@ impl FilesystemPersister {
 		self.path_to_channel_data.clone()
 	}
 
-	pub(crate) fn path_to_monitor_data(&self) -> PathBuf {
-		let mut path = PathBuf::from(self.path_to_channel_data.clone());
-		path.push("monitors");
-		path
-	}
-
-	/// Writes the provided `ChannelManager` to the path provided at `FilesystemPersister`
-	/// initialization, within a file called "manager".
-	pub fn persist_manager<Signer: Sign, M: Deref, T: Deref, K: Deref, F: Deref, L: Deref>(
-		data_dir: String, manager: &ChannelManager<Signer, M, T, K, F, L>,
-	) -> Result<(), std::io::Error>
-	where
-		M::Target: chain::Watch<Signer>,
-		T::Target: BroadcasterInterface,
-		K::Target: KeysInterface<Signer = Signer>,
-		F::Target: FeeEstimator,
-		L::Target: Logger,
-	{
-		let path = PathBuf::from(data_dir);
-		util::write_to_file(path, "manager".to_string(), manager)
-	}
-
 	/// Read `ChannelMonitor`s from disk.
-	pub fn read_channelmonitors<Signer: Sign, K: Deref>(
-		&self, keys_manager: K,
+	pub fn read_channelmonitors<Signer: Sign, K: Deref> (
+		&self, keys_manager: K
 	) -> Result<Vec<(BlockHash, ChannelMonitor<Signer>)>, std::io::Error>
-	where
-		K::Target: KeysInterface<Signer = Signer> + Sized,
+		where K::Target: KeysInterface<Signer=Signer> + Sized,
 	{
-		let path = self.path_to_monitor_data();
+		let mut path = PathBuf::from(&self.path_to_channel_data);
+		path.push("monitors");
 		if !Path::new(&path).exists() {
 			return Ok(Vec::new());
 		}
@@ -116,8 +71,7 @@ impl FilesystemPersister {
 			let file = file_option.unwrap();
 			let owned_file_name = file.file_name();
 			let filename = owned_file_name.to_str();
-			if !filename.is_some() || !filename.unwrap().is_ascii() || filename.unwrap().len() < 65
-			{
+			if !filename.is_some() || !filename.unwrap().is_ascii() || filename.unwrap().len() < 65 {
 				return Err(std::io::Error::new(
 					std::io::ErrorKind::InvalidData,
 					"Invalid ChannelMonitor file name",
@@ -150,72 +104,51 @@ impl FilesystemPersister {
 			let mut buffer = Cursor::new(&contents);
 			match <(BlockHash, ChannelMonitor<Signer>)>::read(&mut buffer, &*keys_manager) {
 				Ok((blockhash, channel_monitor)) => {
-					if channel_monitor.get_funding_txo().0.txid != txid.unwrap()
-						|| channel_monitor.get_funding_txo().0.index != index.unwrap()
-					{
-						return Err(std::io::Error::new(
-							std::io::ErrorKind::InvalidData,
-							"ChannelMonitor was stored in the wrong file",
-						));
+					if channel_monitor.get_funding_txo().0.txid != txid.unwrap() || channel_monitor.get_funding_txo().0.index != index.unwrap() {
+						return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "ChannelMonitor was stored in the wrong file"));
 					}
 					res.push((blockhash, channel_monitor));
 				}
-				Err(e) => {
-					return Err(std::io::Error::new(
-						std::io::ErrorKind::InvalidData,
-						format!("Failed to deserialize ChannelMonitor: {}", e),
-					))
-				}
+				Err(e) => return Err(std::io::Error::new(
+					std::io::ErrorKind::InvalidData,
+					format!("Failed to deserialize ChannelMonitor: {}", e),
+				))
 			}
 		}
 		Ok(res)
 	}
 }
 
-impl<ChannelSigner: Sign> chainmonitor::Persist<ChannelSigner> for FilesystemPersister {
-	// TODO: We really need a way for the persister to inform the user that its time to crash/shut
-	// down once these start returning failure.
-	// A PermanentFailure implies we need to shut down since we're force-closing channels without
-	// even broadcasting!
-
-	fn persist_new_channel(
-		&self, funding_txo: OutPoint, monitor: &ChannelMonitor<ChannelSigner>,
-		_update_id: chainmonitor::MonitorUpdateId,
-	) -> Result<(), chain::ChannelMonitorUpdateErr> {
-		let filename = format!("{}_{}", funding_txo.txid.to_hex(), funding_txo.index);
-		util::write_to_file(self.path_to_monitor_data(), filename, monitor)
-			.map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
-	}
-
-	fn update_persisted_channel(
-		&self, funding_txo: OutPoint, _update: &Option<ChannelMonitorUpdate>,
-		monitor: &ChannelMonitor<ChannelSigner>, _update_id: chainmonitor::MonitorUpdateId,
-	) -> Result<(), chain::ChannelMonitorUpdateErr> {
-		let filename = format!("{}_{}", funding_txo.txid.to_hex(), funding_txo.index);
-		util::write_to_file(self.path_to_monitor_data(), filename, monitor)
-			.map_err(|_| chain::ChannelMonitorUpdateErr::PermanentFailure)
+impl KVStorePersister for FilesystemPersister {
+	fn persist<W: Writeable>(&self, key: &str, object: &W) -> std::io::Result<()> {
+		let mut dest_file = PathBuf::from(self.path_to_channel_data.clone());
+		dest_file.push(key);
+		util::write_to_file(dest_file, object)
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	extern crate bitcoin;
 	extern crate lightning;
+	extern crate bitcoin;
 	use crate::FilesystemPersister;
 	use bitcoin::blockdata::block::{Block, BlockHeader};
 	use bitcoin::hashes::hex::FromHex;
 	use bitcoin::Txid;
+	use lightning::chain::ChannelMonitorUpdateErr;
 	use lightning::chain::chainmonitor::Persist;
 	use lightning::chain::transaction::OutPoint;
-	use lightning::chain::ChannelMonitorUpdateErr;
+	use lightning::{check_closed_broadcast, check_closed_event, check_added_monitors};
 	use lightning::ln::features::InitFeatures;
 	use lightning::ln::functional_test_utils::*;
 	use lightning::util::events::{ClosureReason, MessageSendEventsProvider};
 	use lightning::util::test_utils;
-	use lightning::{check_added_monitors, check_closed_broadcast, check_closed_event};
 	use std::fs;
 	#[cfg(target_os = "windows")]
-	use {lightning::get_event_msg, lightning::ln::msgs::ChannelMessageHandler};
+	use {
+		lightning::get_event_msg,
+		lightning::ln::msgs::ChannelMessageHandler,
+	};
 
 	impl Drop for FilesystemPersister {
 		fn drop(&mut self) {
@@ -238,22 +171,8 @@ mod tests {
 		let persister_1 = FilesystemPersister::new("test_filesystem_persister_1".to_string());
 		let chanmon_cfgs = create_chanmon_cfgs(2);
 		let mut node_cfgs = create_node_cfgs(2, &chanmon_cfgs);
-		let chain_mon_0 = test_utils::TestChainMonitor::new(
-			Some(&chanmon_cfgs[0].chain_source),
-			&chanmon_cfgs[0].tx_broadcaster,
-			&chanmon_cfgs[0].logger,
-			&chanmon_cfgs[0].fee_estimator,
-			&persister_0,
-			&node_cfgs[0].keys_manager,
-		);
-		let chain_mon_1 = test_utils::TestChainMonitor::new(
-			Some(&chanmon_cfgs[1].chain_source),
-			&chanmon_cfgs[1].tx_broadcaster,
-			&chanmon_cfgs[1].logger,
-			&chanmon_cfgs[1].fee_estimator,
-			&persister_1,
-			&node_cfgs[1].keys_manager,
-		);
+		let chain_mon_0 = test_utils::TestChainMonitor::new(Some(&chanmon_cfgs[0].chain_source), &chanmon_cfgs[0].tx_broadcaster, &chanmon_cfgs[0].logger, &chanmon_cfgs[0].fee_estimator, &persister_0, &node_cfgs[0].keys_manager);
+		let chain_mon_1 = test_utils::TestChainMonitor::new(Some(&chanmon_cfgs[1].chain_source), &chanmon_cfgs[1].tx_broadcaster, &chanmon_cfgs[1].logger, &chanmon_cfgs[1].fee_estimator, &persister_1, &node_cfgs[1].keys_manager);
 		node_cfgs[0].chain_monitor = chain_mon_0;
 		node_cfgs[1].chain_monitor = chain_mon_1;
 		let node_chanmgrs = create_node_chanmgrs(2, &node_cfgs, &[None, None]);
@@ -261,50 +180,40 @@ mod tests {
 
 		// Check that the persisted channel data is empty before any channels are
 		// open.
-		let mut persisted_chan_data_0 =
-			persister_0.read_channelmonitors(nodes[0].keys_manager).unwrap();
+		let mut persisted_chan_data_0 = persister_0.read_channelmonitors(nodes[0].keys_manager).unwrap();
 		assert_eq!(persisted_chan_data_0.len(), 0);
-		let mut persisted_chan_data_1 =
-			persister_1.read_channelmonitors(nodes[1].keys_manager).unwrap();
+		let mut persisted_chan_data_1 = persister_1.read_channelmonitors(nodes[1].keys_manager).unwrap();
 		assert_eq!(persisted_chan_data_1.len(), 0);
 
 		// Helper to make sure the channel is on the expected update ID.
 		macro_rules! check_persisted_data {
 			($expected_update_id: expr) => {
-				persisted_chan_data_0 =
-					persister_0.read_channelmonitors(nodes[0].keys_manager).unwrap();
+				persisted_chan_data_0 = persister_0.read_channelmonitors(nodes[0].keys_manager).unwrap();
 				assert_eq!(persisted_chan_data_0.len(), 1);
 				for (_, mon) in persisted_chan_data_0.iter() {
 					assert_eq!(mon.get_latest_update_id(), $expected_update_id);
 				}
-				persisted_chan_data_1 =
-					persister_1.read_channelmonitors(nodes[1].keys_manager).unwrap();
+				persisted_chan_data_1 = persister_1.read_channelmonitors(nodes[1].keys_manager).unwrap();
 				assert_eq!(persisted_chan_data_1.len(), 1);
 				for (_, mon) in persisted_chan_data_1.iter() {
 					assert_eq!(mon.get_latest_update_id(), $expected_update_id);
 				}
-			};
+			}
 		}
 
 		// Create some initial channel and check that a channel was persisted.
-		let _ = create_announced_chan_between_nodes(
-			&nodes,
-			0,
-			1,
-			InitFeatures::known(),
-			InitFeatures::known(),
-		);
+		let _ = create_announced_chan_between_nodes(&nodes, 0, 1, InitFeatures::known(), InitFeatures::known());
 		check_persisted_data!(0);
 
 		// Send a few payments and make sure the monitors are updated to the latest.
-		send_payment(&nodes[0], &vec![&nodes[1]][..], 8000000);
+		send_payment(&nodes[0], &vec!(&nodes[1])[..], 8000000);
 		check_persisted_data!(5);
-		send_payment(&nodes[1], &vec![&nodes[0]][..], 4000000);
+		send_payment(&nodes[1], &vec!(&nodes[0])[..], 4000000);
 		check_persisted_data!(10);
 
 		// Force close because cooperative close doesn't result in any persisted
 		// updates.
-		nodes[0].node.force_close_channel(&nodes[0].node.list_channels()[0].channel_id).unwrap();
+		nodes[0].node.force_close_broadcasting_latest_txn(&nodes[0].node.list_channels()[0].channel_id, &nodes[1].node.get_our_node_id()).unwrap();
 		check_closed_event!(nodes[0], 1, ClosureReason::HolderForceClosed);
 		check_closed_broadcast!(nodes[0], true);
 		check_added_monitors!(nodes[0], 1);
@@ -312,18 +221,8 @@ mod tests {
 		let node_txn = nodes[0].tx_broadcaster.txn_broadcasted.lock().unwrap();
 		assert_eq!(node_txn.len(), 1);
 
-		let header = BlockHeader {
-			version: 0x20000000,
-			prev_blockhash: nodes[0].best_block_hash(),
-			merkle_root: Default::default(),
-			time: 42,
-			bits: 42,
-			nonce: 42,
-		};
-		connect_block(
-			&nodes[1],
-			&Block { header, txdata: vec![node_txn[0].clone(), node_txn[0].clone()] },
-		);
+		let header = BlockHeader { version: 0x20000000, prev_blockhash: nodes[0].best_block_hash(), merkle_root: Default::default(), time: 42, bits: 42, nonce: 42 };
+		connect_block(&nodes[1], &Block { header, txdata: vec![node_txn[0].clone(), node_txn[0].clone()]});
 		check_closed_broadcast!(nodes[1], true);
 		check_closed_event!(nodes[1], 1, ClosureReason::CommitmentTxConfirmed);
 		check_added_monitors!(nodes[1], 1);
@@ -347,14 +246,8 @@ mod tests {
 		let node_cfgs = create_node_cfgs(2, &chanmon_cfgs);
 		let node_chanmgrs = create_node_chanmgrs(2, &node_cfgs, &[None, None]);
 		let nodes = create_network(2, &node_cfgs, &node_chanmgrs);
-		let chan = create_announced_chan_between_nodes(
-			&nodes,
-			0,
-			1,
-			InitFeatures::known(),
-			InitFeatures::known(),
-		);
-		nodes[1].node.force_close_channel(&chan.2).unwrap();
+		let chan = create_announced_chan_between_nodes(&nodes, 0, 1, InitFeatures::known(), InitFeatures::known());
+		nodes[1].node.force_close_broadcasting_latest_txn(&chan.2, &nodes[0].node.get_our_node_id()).unwrap();
 		check_closed_event!(nodes[1], 1, ClosureReason::HolderForceClosed);
 		let mut added_monitors = nodes[1].chain_monitor.added_monitors.lock().unwrap();
 		let update_map = nodes[1].chain_monitor.latest_monitor_update_id.lock().unwrap();
@@ -369,15 +262,12 @@ mod tests {
 		fs::set_permissions(path, perms).unwrap();
 
 		let test_txo = OutPoint {
-			txid: Txid::from_hex(
-				"8984484a580b825b9972d7adb15050b3ab624ccd731946b3eeddb92f4e7ef6be",
-			)
-			.unwrap(),
-			index: 0,
+			txid: Txid::from_hex("8984484a580b825b9972d7adb15050b3ab624ccd731946b3eeddb92f4e7ef6be").unwrap(),
+			index: 0
 		};
 		match persister.persist_new_channel(test_txo, &added_monitors[0].1, update_id.2) {
-			Err(ChannelMonitorUpdateErr::PermanentFailure) => {}
-			_ => panic!("unexpected result from persisting new channel"),
+			Err(ChannelMonitorUpdateErr::PermanentFailure) => {},
+			_ => panic!("unexpected result from persisting new channel")
 		}
 
 		nodes[1].node.get_and_clear_pending_msg_events();
@@ -395,14 +285,8 @@ mod tests {
 		let mut node_cfgs = create_node_cfgs(2, &chanmon_cfgs);
 		let node_chanmgrs = create_node_chanmgrs(2, &node_cfgs, &[None, None]);
 		let nodes = create_network(2, &node_cfgs, &node_chanmgrs);
-		let chan = create_announced_chan_between_nodes(
-			&nodes,
-			0,
-			1,
-			InitFeatures::known(),
-			InitFeatures::known(),
-		);
-		nodes[1].node.force_close_channel(&chan.2).unwrap();
+		let chan = create_announced_chan_between_nodes(&nodes, 0, 1, InitFeatures::known(), InitFeatures::known());
+		nodes[1].node.force_close_broadcasting_latest_txn(&chan.2, &nodes[0].node.get_our_node_id()).unwrap();
 		check_closed_event!(nodes[1], 1, ClosureReason::HolderForceClosed);
 		let mut added_monitors = nodes[1].chain_monitor.added_monitors.lock().unwrap();
 		let update_map = nodes[1].chain_monitor.latest_monitor_update_id.lock().unwrap();
@@ -415,15 +299,12 @@ mod tests {
 		let persister = FilesystemPersister::new(":<>/".to_string());
 
 		let test_txo = OutPoint {
-			txid: Txid::from_hex(
-				"8984484a580b825b9972d7adb15050b3ab624ccd731946b3eeddb92f4e7ef6be",
-			)
-			.unwrap(),
-			index: 0,
+			txid: Txid::from_hex("8984484a580b825b9972d7adb15050b3ab624ccd731946b3eeddb92f4e7ef6be").unwrap(),
+			index: 0
 		};
 		match persister.persist_new_channel(test_txo, &added_monitors[0].1, update_id.2) {
-			Err(ChannelMonitorUpdateErr::PermanentFailure) => {}
-			_ => panic!("unexpected result from persisting new channel"),
+			Err(ChannelMonitorUpdateErr::PermanentFailure) => {},
+			_ => panic!("unexpected result from persisting new channel")
 		}
 
 		nodes[1].node.get_and_clear_pending_msg_events();
@@ -437,10 +318,8 @@ pub mod bench {
 
 	#[bench]
 	fn bench_sends(bench: &mut Bencher) {
-		let persister_a =
-			super::FilesystemPersister::new("bench_filesystem_persister_a".to_string());
-		let persister_b =
-			super::FilesystemPersister::new("bench_filesystem_persister_b".to_string());
+		let persister_a = super::FilesystemPersister::new("bench_filesystem_persister_a".to_string());
+		let persister_b = super::FilesystemPersister::new("bench_filesystem_persister_b".to_string());
 		lightning::ln::channelmanager::bench::bench_two_sends(bench, persister_a, persister_b);
 	}
 }

@@ -16,19 +16,20 @@ use lightning::chain::transaction::OutPoint;
 use lightning::ln::channelmanager::{ChannelDetails, ChannelCounterparty};
 use lightning::ln::features::InitFeatures;
 use lightning::ln::msgs;
+use lightning::routing::gossip::{NetworkGraph, RoutingFees};
 use lightning::routing::router::{find_route, PaymentParameters, RouteHint, RouteHintHop, RouteParameters};
 use lightning::routing::scoring::FixedPenaltyScorer;
 use lightning::util::logger::Logger;
 use lightning::util::ser::Readable;
-use lightning::routing::network_graph::{NetworkGraph, RoutingFees};
 
 use bitcoin::hashes::Hash;
-use bitcoin::secp256k1::key::PublicKey;
+use bitcoin::secp256k1::PublicKey;
 use bitcoin::network::constants::Network;
 use bitcoin::blockdata::constants::genesis_block;
 
 use utils::test_logger;
 
+use std::convert::TryInto;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -158,10 +159,10 @@ pub fn do_test<Out: test_logger::Output>(data: &[u8], out: Out) {
 		}
 	}
 
-	let logger: Arc<dyn Logger> = Arc::new(test_logger::TestLogger::new("".to_owned(), out));
+	let logger = test_logger::TestLogger::new("".to_owned(), out);
 
 	let our_pubkey = get_pubkey!();
-	let net_graph = NetworkGraph::new(genesis_block(Network::Bitcoin).header.block_hash());
+	let net_graph = NetworkGraph::new(genesis_block(Network::Bitcoin).header.block_hash(), &logger);
 
 	let mut node_pks = HashSet::new();
 	let mut scid = 42;
@@ -195,7 +196,7 @@ pub fn do_test<Out: test_logger::Output>(data: &[u8], out: Out) {
 			},
 			4 => {
 				let short_channel_id = slice_to_be64(get_slice!(8));
-				net_graph.close_channel_from_update(short_channel_id, false);
+				net_graph.channel_failed(short_channel_id, false);
 			},
 			_ if node_pks.is_empty() => {},
 			_ => {
@@ -205,7 +206,8 @@ pub fn do_test<Out: test_logger::Output>(data: &[u8], out: Out) {
 					count => {
 						for _ in 0..count {
 							scid += 1;
-							let rnid = node_pks.iter().skip(slice_to_be16(get_slice!(2))as usize % node_pks.len()).next().unwrap();
+							let rnid = node_pks.iter().skip(u16::from_be_bytes(get_slice!(2).try_into().unwrap()) as usize % node_pks.len()).next().unwrap();
+							let capacity = u64::from_be_bytes(get_slice!(8).try_into().unwrap());
 							first_hops_vec.push(ChannelDetails {
 								channel_id: [0; 32],
 								counterparty: ChannelCounterparty {
@@ -213,18 +215,27 @@ pub fn do_test<Out: test_logger::Output>(data: &[u8], out: Out) {
 									features: InitFeatures::known(),
 									unspendable_punishment_reserve: 0,
 									forwarding_info: None,
+									outbound_htlc_minimum_msat: None,
+									outbound_htlc_maximum_msat: None,
 								},
 								funding_txo: Some(OutPoint { txid: bitcoin::Txid::from_slice(&[0; 32]).unwrap(), index: 0 }),
+								channel_type: None,
 								short_channel_id: Some(scid),
-								channel_value_satoshis: slice_to_be64(get_slice!(8)),
+								inbound_scid_alias: None,
+								outbound_scid_alias: None,
+								channel_value_satoshis: capacity,
 								user_channel_id: 0, inbound_capacity_msat: 0,
 								unspendable_punishment_reserve: None,
 								confirmations_required: None,
 								force_close_spend_delay: None,
-								is_outbound: true, is_funding_locked: true,
+								is_outbound: true, is_channel_ready: true,
 								is_usable: true, is_public: true,
 								balance_msat: 0,
-								outbound_capacity_msat: 0,
+								outbound_capacity_msat: capacity.saturating_mul(1000),
+								next_outbound_htlc_limit_msat: capacity.saturating_mul(1000),
+								inbound_htlc_minimum_msat: None,
+								inbound_htlc_maximum_msat: None,
+								config: None,
 							});
 						}
 						Some(&first_hops_vec[..])
@@ -250,6 +261,7 @@ pub fn do_test<Out: test_logger::Output>(data: &[u8], out: Out) {
 					}
 				}
 				let scorer = FixedPenaltyScorer::with_penalty(0);
+				let random_seed_bytes: [u8; 32] = [get_slice!(1)[0]; 32];
 				for target in node_pks.iter() {
 					let route_params = RouteParameters {
 						payment_params: PaymentParameters::from_node_id(*target).with_route_hints(last_hops.clone()),
@@ -258,7 +270,7 @@ pub fn do_test<Out: test_logger::Output>(data: &[u8], out: Out) {
 					};
 					let _ = find_route(&our_pubkey, &route_params, &net_graph,
 						first_hops.map(|c| c.iter().collect::<Vec<_>>()).as_ref().map(|a| a.as_slice()),
-						Arc::clone(&logger), &scorer);
+						&logger, &scorer, &random_seed_bytes);
 				}
 			},
 		}

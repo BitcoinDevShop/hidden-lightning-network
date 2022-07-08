@@ -28,7 +28,9 @@ use lightning::ln::channelmanager::{
 };
 use lightning::ln::peer_handler::{IgnoringMessageHandler, MessageHandler, SimpleArcPeerManager};
 use lightning::ln::{PaymentHash, PaymentPreimage, PaymentSecret};
-use lightning::routing::network_graph::{NetGraphMsgHandler, NetworkGraph};
+use lightning::routing::gossip;
+use lightning::routing::gossip::{NodeId, P2PGossipSync};
+// use lightning::routing::network_graph::{NetGraphMsgHandler, NetworkGraph};
 use lightning::routing::router::{Route, RouteHop};
 use lightning::routing::scoring::ProbabilisticScorer;
 use lightning::util::config::UserConfig;
@@ -119,12 +121,14 @@ pub(crate) type ChannelManager =
 pub(crate) type InvoicePayer<E> = payment::InvoicePayer<
 	Arc<ChannelManager>,
 	Router,
-	Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
+	Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>, Arc<FilesystemLogger>>>>,
 	Arc<FilesystemLogger>,
 	E,
 >;
 
 type Router = DefaultRouter<Arc<NetworkGraph>, Arc<FilesystemLogger>>;
+
+pub(crate) type NetworkGraph = gossip::NetworkGraph<Arc<FilesystemLogger>>;
 
 pub type PaymentState = Arc<Mutex<HashMap<PaymentId, Route>>>;
 // pub(crate) type PaymentInfoStorage = Arc<Mutex<HashMap<PaymentHash, PaymentInfo>>>;

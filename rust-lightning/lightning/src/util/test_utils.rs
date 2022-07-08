@@ -18,7 +18,7 @@ use chain::channelmonitor::MonitorEvent;
 use chain::transaction::OutPoint;
 use chain::keysinterface;
 use ln::features::{ChannelFeatures, InitFeatures};
-use ln::msgs;
+use ln::{msgs, wire};
 use ln::msgs::OptionalField;
 use ln::script::ShutdownScript;
 use routing::scoring::FixedPenaltyScorer;
@@ -31,12 +31,12 @@ use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::blockdata::transaction::{Transaction, TxOut};
 use bitcoin::blockdata::script::{Builder, Script};
 use bitcoin::blockdata::opcodes;
-use bitcoin::blockdata::block::BlockHeader;
+use bitcoin::blockdata::block::Block;
 use bitcoin::network::constants::Network;
 use bitcoin::hash_types::{BlockHash, Txid};
 
-use bitcoin::secp256k1::{SecretKey, PublicKey, Secp256k1, Signature};
-use bitcoin::secp256k1::recovery::RecoverableSignature;
+use bitcoin::secp256k1::{SecretKey, PublicKey, Secp256k1, ecdsa::Signature};
+use bitcoin::secp256k1::ecdsa::RecoverableSignature;
 
 use regex;
 
@@ -48,6 +48,9 @@ use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use core::{cmp, mem};
 use bitcoin::bech32::u5;
 use chain::keysinterface::{InMemorySigner, Recipient, KeyMaterial};
+
+#[cfg(feature = "std")]
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct TestVecWriter(pub Vec<u8>);
 impl Writer for TestVecWriter {
@@ -113,6 +116,11 @@ impl<'a> TestChainMonitor<'a> {
 			expect_channel_force_closed: Mutex::new(None),
 		}
 	}
+
+	pub fn complete_sole_pending_chan_update(&self, channel_id: &[u8; 32]) {
+		let (outpoint, _, latest_update) = self.latest_monitor_update_id.lock().unwrap().get(channel_id).unwrap().clone();
+		self.chain_monitor.channel_monitor_updated(outpoint, latest_update).unwrap();
+	}
 }
 impl<'a> chain::Watch<EnforcingSigner> for TestChainMonitor<'a> {
 	fn watch_channel(&self, funding_txo: OutPoint, monitor: channelmonitor::ChannelMonitor<EnforcingSigner>) -> Result<(), chain::ChannelMonitorUpdateErr> {
@@ -161,7 +169,7 @@ impl<'a> chain::Watch<EnforcingSigner> for TestChainMonitor<'a> {
 		update_res
 	}
 
-	fn release_pending_monitor_events(&self) -> Vec<MonitorEvent> {
+	fn release_pending_monitor_events(&self) -> Vec<(OutPoint, Vec<MonitorEvent>)> {
 		return self.chain_monitor.release_pending_monitor_events();
 	}
 }
@@ -221,11 +229,11 @@ impl<Signer: keysinterface::Sign> chainmonitor::Persist<Signer> for TestPersiste
 
 pub struct TestBroadcaster {
 	pub txn_broadcasted: Mutex<Vec<Transaction>>,
-	pub blocks: Arc<Mutex<Vec<(BlockHeader, u32)>>>,
+	pub blocks: Arc<Mutex<Vec<(Block, u32)>>>,
 }
 
 impl TestBroadcaster {
-	pub fn new(blocks: Arc<Mutex<Vec<(BlockHeader, u32)>>>) -> TestBroadcaster {
+	pub fn new(blocks: Arc<Mutex<Vec<(Block, u32)>>>) -> TestBroadcaster {
 		TestBroadcaster { txn_broadcasted: Mutex::new(Vec::new()), blocks }
 	}
 }
@@ -246,37 +254,106 @@ impl chaininterface::BroadcasterInterface for TestBroadcaster {
 
 pub struct TestChannelMessageHandler {
 	pub pending_events: Mutex<Vec<events::MessageSendEvent>>,
+	expected_recv_msgs: Mutex<Option<Vec<wire::Message<()>>>>,
 }
 
 impl TestChannelMessageHandler {
 	pub fn new() -> Self {
 		TestChannelMessageHandler {
 			pending_events: Mutex::new(Vec::new()),
+			expected_recv_msgs: Mutex::new(None),
+		}
+	}
+
+	#[cfg(test)]
+	pub(crate) fn expect_receive_msg(&self, ev: wire::Message<()>) {
+		let mut expected_msgs = self.expected_recv_msgs.lock().unwrap();
+		if expected_msgs.is_none() { *expected_msgs = Some(Vec::new()); }
+		expected_msgs.as_mut().unwrap().push(ev);
+	}
+
+	fn received_msg(&self, _ev: wire::Message<()>) {
+		let mut msgs = self.expected_recv_msgs.lock().unwrap();
+		if msgs.is_none() { return; }
+		assert!(!msgs.as_ref().unwrap().is_empty(), "Received message when we weren't expecting one");
+		#[cfg(test)]
+		assert_eq!(msgs.as_ref().unwrap()[0], _ev);
+		msgs.as_mut().unwrap().remove(0);
+	}
+}
+
+impl Drop for TestChannelMessageHandler {
+	fn drop(&mut self) {
+		let l = self.expected_recv_msgs.lock().unwrap();
+		#[cfg(feature = "std")]
+		{
+			if !std::thread::panicking() {
+				assert!(l.is_none() || l.as_ref().unwrap().is_empty());
+			}
 		}
 	}
 }
 
 impl msgs::ChannelMessageHandler for TestChannelMessageHandler {
-	fn handle_open_channel(&self, _their_node_id: &PublicKey, _their_features: InitFeatures, _msg: &msgs::OpenChannel) {}
-	fn handle_accept_channel(&self, _their_node_id: &PublicKey, _their_features: InitFeatures, _msg: &msgs::AcceptChannel) {}
-	fn handle_funding_created(&self, _their_node_id: &PublicKey, _msg: &msgs::FundingCreated) {}
-	fn handle_funding_signed(&self, _their_node_id: &PublicKey, _msg: &msgs::FundingSigned) {}
-	fn handle_funding_locked(&self, _their_node_id: &PublicKey, _msg: &msgs::FundingLocked) {}
-	fn handle_shutdown(&self, _their_node_id: &PublicKey, _their_features: &InitFeatures, _msg: &msgs::Shutdown) {}
-	fn handle_closing_signed(&self, _their_node_id: &PublicKey, _msg: &msgs::ClosingSigned) {}
-	fn handle_update_add_htlc(&self, _their_node_id: &PublicKey, _msg: &msgs::UpdateAddHTLC) {}
-	fn handle_update_fulfill_htlc(&self, _their_node_id: &PublicKey, _msg: &msgs::UpdateFulfillHTLC) {}
-	fn handle_update_fail_htlc(&self, _their_node_id: &PublicKey, _msg: &msgs::UpdateFailHTLC) {}
-	fn handle_update_fail_malformed_htlc(&self, _their_node_id: &PublicKey, _msg: &msgs::UpdateFailMalformedHTLC) {}
-	fn handle_commitment_signed(&self, _their_node_id: &PublicKey, _msg: &msgs::CommitmentSigned) {}
-	fn handle_revoke_and_ack(&self, _their_node_id: &PublicKey, _msg: &msgs::RevokeAndACK) {}
-	fn handle_update_fee(&self, _their_node_id: &PublicKey, _msg: &msgs::UpdateFee) {}
-	fn handle_channel_update(&self, _their_node_id: &PublicKey, _msg: &msgs::ChannelUpdate) {}
-	fn handle_announcement_signatures(&self, _their_node_id: &PublicKey, _msg: &msgs::AnnouncementSignatures) {}
-	fn handle_channel_reestablish(&self, _their_node_id: &PublicKey, _msg: &msgs::ChannelReestablish) {}
+	fn handle_open_channel(&self, _their_node_id: &PublicKey, _their_features: InitFeatures, msg: &msgs::OpenChannel) {
+		self.received_msg(wire::Message::OpenChannel(msg.clone()));
+	}
+	fn handle_accept_channel(&self, _their_node_id: &PublicKey, _their_features: InitFeatures, msg: &msgs::AcceptChannel) {
+		self.received_msg(wire::Message::AcceptChannel(msg.clone()));
+	}
+	fn handle_funding_created(&self, _their_node_id: &PublicKey, msg: &msgs::FundingCreated) {
+		self.received_msg(wire::Message::FundingCreated(msg.clone()));
+	}
+	fn handle_funding_signed(&self, _their_node_id: &PublicKey, msg: &msgs::FundingSigned) {
+		self.received_msg(wire::Message::FundingSigned(msg.clone()));
+	}
+	fn handle_channel_ready(&self, _their_node_id: &PublicKey, msg: &msgs::ChannelReady) {
+		self.received_msg(wire::Message::ChannelReady(msg.clone()));
+	}
+	fn handle_shutdown(&self, _their_node_id: &PublicKey, _their_features: &InitFeatures, msg: &msgs::Shutdown) {
+		self.received_msg(wire::Message::Shutdown(msg.clone()));
+	}
+	fn handle_closing_signed(&self, _their_node_id: &PublicKey, msg: &msgs::ClosingSigned) {
+		self.received_msg(wire::Message::ClosingSigned(msg.clone()));
+	}
+	fn handle_update_add_htlc(&self, _their_node_id: &PublicKey, msg: &msgs::UpdateAddHTLC) {
+		self.received_msg(wire::Message::UpdateAddHTLC(msg.clone()));
+	}
+	fn handle_update_fulfill_htlc(&self, _their_node_id: &PublicKey, msg: &msgs::UpdateFulfillHTLC) {
+		self.received_msg(wire::Message::UpdateFulfillHTLC(msg.clone()));
+	}
+	fn handle_update_fail_htlc(&self, _their_node_id: &PublicKey, msg: &msgs::UpdateFailHTLC) {
+		self.received_msg(wire::Message::UpdateFailHTLC(msg.clone()));
+	}
+	fn handle_update_fail_malformed_htlc(&self, _their_node_id: &PublicKey, msg: &msgs::UpdateFailMalformedHTLC) {
+		self.received_msg(wire::Message::UpdateFailMalformedHTLC(msg.clone()));
+	}
+	fn handle_commitment_signed(&self, _their_node_id: &PublicKey, msg: &msgs::CommitmentSigned) {
+		self.received_msg(wire::Message::CommitmentSigned(msg.clone()));
+	}
+	fn handle_revoke_and_ack(&self, _their_node_id: &PublicKey, msg: &msgs::RevokeAndACK) {
+		self.received_msg(wire::Message::RevokeAndACK(msg.clone()));
+	}
+	fn handle_update_fee(&self, _their_node_id: &PublicKey, msg: &msgs::UpdateFee) {
+		self.received_msg(wire::Message::UpdateFee(msg.clone()));
+	}
+	fn handle_channel_update(&self, _their_node_id: &PublicKey, _msg: &msgs::ChannelUpdate) {
+		// Don't call `received_msg` here as `TestRoutingMessageHandler` generates these sometimes
+	}
+	fn handle_announcement_signatures(&self, _their_node_id: &PublicKey, msg: &msgs::AnnouncementSignatures) {
+		self.received_msg(wire::Message::AnnouncementSignatures(msg.clone()));
+	}
+	fn handle_channel_reestablish(&self, _their_node_id: &PublicKey, msg: &msgs::ChannelReestablish) {
+		self.received_msg(wire::Message::ChannelReestablish(msg.clone()));
+	}
 	fn peer_disconnected(&self, _their_node_id: &PublicKey, _no_connection_possible: bool) {}
-	fn peer_connected(&self, _their_node_id: &PublicKey, _msg: &msgs::Init) {}
-	fn handle_error(&self, _their_node_id: &PublicKey, _msg: &msgs::ErrorMessage) {}
+	fn peer_connected(&self, _their_node_id: &PublicKey, _msg: &msgs::Init) {
+		// Don't bother with `received_msg` for Init as its auto-generated and we don't want to
+		// bother re-generating the expected Init message in all tests.
+	}
+	fn handle_error(&self, _their_node_id: &PublicKey, msg: &msgs::ErrorMessage) {
+		self.received_msg(wire::Message::Error(msg.clone()));
+	}
 }
 
 impl events::MessageSendEventsProvider for TestChannelMessageHandler {
@@ -341,6 +418,7 @@ fn get_dummy_channel_update(short_chan_id: u64) -> msgs::ChannelUpdate {
 pub struct TestRoutingMessageHandler {
 	pub chan_upds_recvd: AtomicUsize,
 	pub chan_anns_recvd: AtomicUsize,
+	pub pending_events: Mutex<Vec<events::MessageSendEvent>>,
 	pub request_full_sync: AtomicBool,
 }
 
@@ -349,6 +427,7 @@ impl TestRoutingMessageHandler {
 		TestRoutingMessageHandler {
 			chan_upds_recvd: AtomicUsize::new(0),
 			chan_anns_recvd: AtomicUsize::new(0),
+			pending_events: Mutex::new(vec![]),
 			request_full_sync: AtomicBool::new(false),
 		}
 	}
@@ -384,7 +463,35 @@ impl msgs::RoutingMessageHandler for TestRoutingMessageHandler {
 		Vec::new()
 	}
 
-	fn sync_routing_table(&self, _their_node_id: &PublicKey, _init_msg: &msgs::Init) {}
+	fn peer_connected(&self, their_node_id: &PublicKey, init_msg: &msgs::Init) {
+		if !init_msg.features.supports_gossip_queries() {
+			return ();
+		}
+
+		let should_request_full_sync = self.request_full_sync.load(Ordering::Acquire);
+
+		#[allow(unused_mut, unused_assignments)]
+		let mut gossip_start_time = 0;
+		#[cfg(feature = "std")]
+		{
+			gossip_start_time = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time must be > 1970").as_secs();
+			if should_request_full_sync {
+				gossip_start_time -= 60 * 60 * 24 * 7 * 2; // 2 weeks ago
+			} else {
+				gossip_start_time -= 60 * 60; // an hour ago
+			}
+		}
+
+		let mut pending_events = self.pending_events.lock().unwrap();
+		pending_events.push(events::MessageSendEvent::SendGossipTimestampFilter {
+			node_id: their_node_id.clone(),
+			msg: msgs::GossipTimestampFilter {
+				chain_hash: genesis_block(Network::Testnet).header.block_hash(),
+				first_timestamp: gossip_start_time as u32,
+				timestamp_range: u32::max_value(),
+			},
+		});
+	}
 
 	fn handle_reply_channel_range(&self, _their_node_id: &PublicKey, _msg: msgs::ReplyChannelRange) -> Result<(), msgs::LightningError> {
 		Ok(())
@@ -405,13 +512,19 @@ impl msgs::RoutingMessageHandler for TestRoutingMessageHandler {
 
 impl events::MessageSendEventsProvider for TestRoutingMessageHandler {
 	fn get_and_clear_pending_msg_events(&self) -> Vec<events::MessageSendEvent> {
-		vec![]
+		let mut ret = Vec::new();
+		let mut pending_events = self.pending_events.lock().unwrap();
+		core::mem::swap(&mut ret, &mut pending_events);
+		ret
 	}
 }
 
 pub struct TestLogger {
 	level: Level,
+	#[cfg(feature = "std")]
 	id: String,
+	#[cfg(not(feature = "std"))]
+	_id: String,
 	pub lines: Mutex<HashMap<(String, String), usize>>,
 }
 
@@ -422,7 +535,10 @@ impl TestLogger {
 	pub fn with_id(id: String) -> TestLogger {
 		TestLogger {
 			level: Level::Trace,
+			#[cfg(feature = "std")]
 			id,
+			#[cfg(not(feature = "std"))]
+			_id: id,
 			lines: Mutex::new(HashMap::new())
 		}
 	}
@@ -471,8 +587,7 @@ impl Logger for TestLogger {
 
 pub struct TestKeysInterface {
 	pub backing: keysinterface::PhantomKeysManager,
-	pub override_session_priv: Mutex<Option<[u8; 32]>>,
-	pub override_channel_id_priv: Mutex<Option<[u8; 32]>>,
+	pub override_random_bytes: Mutex<Option<[u8; 32]>>,
 	pub disable_revocation_policy_check: bool,
 	enforcement_states: Mutex<HashMap<[u8;32], Arc<Mutex<EnforcementState>>>>,
 	expectations: Mutex<Option<VecDeque<OnGetShutdownScriptpubkey>>>,
@@ -506,16 +621,9 @@ impl keysinterface::KeysInterface for TestKeysInterface {
 	}
 
 	fn get_secure_random_bytes(&self) -> [u8; 32] {
-		let override_channel_id = self.override_channel_id_priv.lock().unwrap();
-		let override_session_key = self.override_session_priv.lock().unwrap();
-		if override_channel_id.is_some() && override_session_key.is_some() {
-			panic!("We don't know which override key to use!");
-		}
-		if let Some(key) = &*override_channel_id {
-			return *key;
-		}
-		if let Some(key) = &*override_session_key {
-			return *key;
+		let override_random_bytes = self.override_random_bytes.lock().unwrap();
+		if let Some(bytes) = &*override_random_bytes {
+			return *bytes;
 		}
 		self.backing.get_secure_random_bytes()
 	}
@@ -543,8 +651,7 @@ impl TestKeysInterface {
 		let now = Duration::from_secs(genesis_block(network).header.time as u64);
 		Self {
 			backing: keysinterface::PhantomKeysManager::new(seed, now.as_secs(), now.subsec_nanos(), seed),
-			override_session_priv: Mutex::new(None),
-			override_channel_id_priv: Mutex::new(None),
+			override_random_bytes: Mutex::new(None),
 			disable_revocation_policy_check: false,
 			enforcement_states: Mutex::new(HashMap::new()),
 			expectations: Mutex::new(None),

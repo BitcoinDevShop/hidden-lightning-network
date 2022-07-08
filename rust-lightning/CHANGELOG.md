@@ -1,3 +1,343 @@
+# 0.0.109 - 2022-06-30
+
+## API Updates
+ * `ChannelManager::update_channel_config` has been added to allow the fields
+   in `ChannelConfig` to be changed in a given channel after open (#1527).
+ * If we reconnect to a peer which proves we have a stale channel state, rather
+   than force-closing we will instead panic to provide an opportunity to switch
+   to the latest state and continue operating without channel loss (#1564).
+ * A `NodeAlias` struct has been added which handles string sanitization for
+   node aliases via the `Display` trait (#1544).
+ * `ProbabilisticScoringParameters` now has a `banned_nodes` set which we will
+    never route through during path finding (#1550).
+ * `ProbabilisticScoringParameters` now offers an `anti_probing_penalty_msat`
+   option to prefer channels which afford better privacy when routing (#1555).
+ * `ProbabilisticScorer` now provides access to its estimated liquidity range
+   for a given channel via `estimated_channel_liquidity_range` (#1549).
+ * Options which cannot be changed at runtime have been moved from
+   `ChannelConfig` to `ChannelHandshakeConfig` (#1529).
+ * `find_route` takes `&NetworkGraph` instead of `ReadOnlyNetworkGraph (#1583).
+ * `ChannelDetails` now contains a copy of the current `ChannelConfig` (#1527).
+ * The `lightning-invoice` crate now optionally depends on `serde`, with
+   `Invoice` implementing `serde::{Deserialize,Serialize}` if enabled (#1548).
+ * Several fields in `UserConfig` have been renamed for clarity (#1540).
+
+## Bug Fixes
+ * `find_route` no longer selects routes with more than
+   `PaymentParameters::max_mpp_path_count` paths, and
+   `ChannelManager::send_payment` no longer refuses to send along routes with
+   more than ten paths (#1526).
+ * Fixed two cases where HTLCs pending at the time a counterparty broadcasts a
+   revoked commitment transaction are considered resolved prior to their actual
+   resolution on-chain, possibly passing the update to another channel (#1486).
+ * HTLCs which are relayed through LDK may now have a total expiry time two
+   weeks in the future, up from one, reducing forwarding failures (#1532).
+
+## Serialization Compatibility
+ * All new fields are ignored by prior versions of LDK. All new fields are not
+   present when reading objects serialized by prior versions of LDK.
+ * `ChannelConfig`'s serialization format has changed and is not compatible
+   with any previous version of LDK. Attempts to read values written by a
+   previous version of LDK will fail and attempts to read newly written objects
+   using a previous version of LDK will fail. It is not expected that users are
+   serializing `ChannelConfig` using the LDK serialization API, however, if a
+   backward compatibility wrapper is required, please open an issue.
+
+## Security
+0.0.109 fixes a denial-of-service vulnerability which is reachable from
+untrusted input in some application deployments.
+
+ * Third parties which are allowed to open channels with an LDK-based node may
+   fund a channel with a bogus and maliciously-crafted transaction which, when
+   spent, can cause a panic in the channel's corresponding `ChannelMonitor`.
+   Such a channel is never usable as it cannot be funded with a funding
+   transaction which matches the required output script, allowing the
+   `ChannelMonitor` for such channels to be safely purged as a workaround on
+   previous versions of LDK. Thanks to Eugene Siegel for reporting this issue.
+
+In total, this release features 32 files changed, 1948 insertions, 532
+deletions in 33 commits from 9 authors, in alphabetical order:
+ * Antoine Riard
+ * Daniel Granhão
+ * Elias Rohrer
+ * Jeffrey Czyz
+ * Matt Corallo
+ * Matt Faltyn
+ * NicolaLS
+ * Valentine Wallace
+ * Wilmer Paulino
+
+
+# 0.0.108 - 2022-06-10
+
+## Bug Fixes
+ * Fixed `lightning-background-processor` build in release mode.
+
+In total, this release features 9 files changed, 120 insertions, 74
+deletions in 5 commits from 4 authors, in alphabetical order:
+ * Elias Rohrer
+ * Matt Corallo
+ * Max Fang
+ * Viktor Tigerström
+
+# 0.0.107 - 2022-06-08
+
+## API Updates
+ * Channels larger than 16777215 sats (Wumbo!) are now supported and can be
+   enabled for inbound channels using
+   `ChannelHandshakeLimits::max_funding_satoshis` (#1425).
+ * Support for feature `option_zeroconf`, allowing immediate forwarding of
+   payments after channel opening. This is configured for outbound channels
+   using `ChannelHandshakeLimits::trust_own_funding_0conf` whereas
+   `ChannelManager::accept_inbound_channel_from_trusted_peer_0conf` has to be
+   used for accepting inbound channels (#1401, #1505).
+ * `ChannelManager::claim_funds` no longer returns a `bool` to indicate success.
+   Instead, an `Event::PaymentClaimed` is generated if the claim was successful.
+   Likewise, `ChannelManager::fail_htlc_backwards` no longer has a return value
+   (#1434).
+ * `lightning-rapid-gossip-sync` is a new crate for syncing gossip data from a
+   server, primarily aimed at mobile devices (#1155).
+ * `RapidGossipSync` can be passed to `BackgroundProcessor` in order to persist
+   the `NetworkGraph` and handle `NetworkUpdate`s during event handling (#1433,
+   #1517).
+ * `NetGraphMsgHandler` has been renamed to `P2PGossipSync`, the `network_graph`
+    module has been renamed to `gossip`, and `NetworkUpdate::ChannelClosed` has
+   been renamed `NetworkUpdate::ChannelFailure` (#1159).
+ * Added a `filtered_block_connected` method to `chain::Listen` and a default
+   implementation of `block_connected` for those fetching filtered instead of
+   full blocks (#1453).
+ * The `lightning-block-sync` crate's `BlockSource` trait methods now take
+   `&self` instead of `&mut self` (#1307).
+ * `inbound_payment` module is now public to allow for creating invoices without
+   a `ChannelManager` (#1384).
+ * `lightning-block-sync`'s `init` and `poll` modules support `&dyn BlockSource`
+   which can be determined at runtime (#1423).
+ * `lightning-invoice` crate's `utils` now accept an expiration time (#1422,
+   #1474).
+ * `Event::PaymentForwarded` includes `prev_channel_id` and `next_channel_id`
+   (#1419, #1475).
+ * `chain::Watch::release_pending_monitor_events`' return type now associates
+   `MonitorEvent`s with funding `OutPoints` (#1475).
+ * `lightning-background-processor` crate's `Persister` trait has been moved to
+   `lightning` crate's `util::persist` module, which now has a general
+   `KVStorePersister` trait. Blanket implementations of `Persister` and
+   `chainmonitor::Persist` are given for types implementing `KVStorePersister`.
+   ` lightning-persister`'s `FilesystemPersister` implements `KVStorePersister`
+   (#1417).
+ * `ChannelDetails` and `ChannelCounterparty` include fields for HTLC minimum
+   and maximum values (#1378).
+ * Added a `max_inbound_htlc_value_in_flight_percent_of_channel` field to
+   `ChannelHandshakeConfig`, capping the total value of outstanding inbound
+   HTLCs for a channel (#1444).
+ * `ProbabilisticScorer` is parameterized by a `Logger`, which it uses to log
+   channel liquidity updates or lack thereof (#1405).
+ * `ChannelDetails` has an `outbound_htlc_limit_msat` field, which should be
+   used in routing instead of `outbound_capacity_msat` (#1435).
+ * `ProbabilisticScorer`'s channel liquidities can be logged via
+   `debug_log_liquidity_stats` (#1460).
+ * `BackgroundProcessor` now takes an optional `WriteableScore` which it will
+   persist using the `Persister` trait's new `persist_scorer` method (#1416).
+ * Upgraded to `bitcoin` crate version 0.28.1 (#1389).
+ * `ShutdownScript::new_witness_program` now takes a `WitnessVersion` instead of
+   a `NonZeroU8` (#1389).
+ * Channels will no longer be automatically force closed when the counterparty
+   is disconnected due to incompatibility (#1429).
+ * `ChannelManager` methods for funding, accepting, and closing channels now
+   take a `counterparty_node_id` parameter, which has also been added as a field
+   to `Event::FundingGenerationReady` (#1479, #1485).
+ * `InvoicePayer::new` now takes a `Retry` enum (replacing the `RetryAttempts`
+   struct), which supports both attempt- and timeout-based retrying (#1418).
+ * `Score::channel_penalty_msat` takes a `ChannelUsage` struct, which contains
+   the capacity as an `EffectiveCapacity` enum and any potential in-flight HTLC
+   value, rather than a single `u64`. Used by `ProbabilisticScorer` for more
+   accurate penalties (#1456).
+ * `build_route_from_hops` is a new function useful for constructing a `Route`
+   given a specific list of public keys (#1491).
+ * `FundingLocked` message has been renamed `ChannelReady`, and related
+   identifiers have been renamed accordingly (#1506).
+ * `core2::io` or `std::io` (depending on feature flags `no-std` or `std`) is
+   exported as a `lightning::io` module (#1504).
+ * The deprecated `Scorer` has been removed in favor or `ProbabilisticScorer`
+   (#1512).
+
+## Performance Improvements
+ * `lightning-persister` crate's `FilesystemPersister` is faster by 15x (#1404).
+ * Log gossip query messages at `GOSSIP` instead of `TRACE` to avoid
+   overwhelming default logging (#1421).
+ * `PeerManager` supports processing messages from different peers in parallel,
+   and this is taken advantage of in gossip processing (#1023).
+ * Greatly reduced per-channel and per-node memory usage due to upgrade of
+   `secp256k1` crate to 0.22.1 and `bitcoin` crate to 0.28.1
+ * Reduced per-peer memory usage in `PeerManager` (#1472).
+
+## Spec Compliance
+ * `find_route` now assumes variable-length onions by default for nodes where
+   support for the feature is unknown (#1414).
+ * A `warn` message is now sent when receiving a `channel_reestablish` with an
+   old commitment transaction number rather than immediately force-closing the
+   channel (#1430).
+ * When a `channel_update` message is included in an onion error's `failuremsg`,
+   its message type is now encoded. Reading such messages is also supported
+   (#1465).
+
+## Bug Fixes
+ * Fixed a bug where crashing while persisting a `ChannelMonitorUpdate` for a
+   part of a multi-path payment could cause loss of funds due to a partial
+   payment claim on restart (#1434).
+ * `BackgroundProcessor` has been fixed to improve serialization reliability on
+   slow systems which can avoid force-closes (#1436).
+ * `gossip_timestamp_filter` filters are now honored when sending gossip to
+   peers (#1452).
+ * During a reorg, only force-close a channel if its funding transaction is
+   unconfirmed rather than as it loses confirmations (#1461).
+ * Fixed a rare panic in `lightning-net-tokio` when fetching a peer's socket
+   address after the connection has been closed caused by a race condition
+   (#1449).
+ * `find_route` will no longer return routes that would cause onion construction
+   to fail in some cases (#1476).
+ * `ProbabilisticScorer` uses more precision when approximating `log10` (#1406).
+
+## Serialization Compatibility
+ * All above new events/fields are ignored by prior clients. All above new
+   events/fields are not present when reading objects serialized by prior
+   versions of the library.
+ * `ChannelManager` serialization is no longer compatible with versions prior to
+   0.0.99 (#1401).
+ * Channels with `option_zeroconf` feature enabled (not required for 0-conf
+   channel use) will be unreadable by versions prior to 0.0.107 (#1401, #1505).
+
+In total, this release features 96 files changed, 9304 insertions, 4503
+deletions in 153 commits from 18 authors, in alphabetical order:
+ * Arik Sosman
+ * Devrandom
+ * Duncan Dean
+ * Elias Rohrer
+ * Jeffrey Czyz
+ * John Cantrell
+ * John Corser
+ * Jurvis Tan
+ * Justin Moon
+ * KaFai Choi
+ * Matt Faltyn
+ * Matt Corallo
+ * Valentine Wallace
+ * Viktor Tigerström
+ * Vincenzo Palazzo
+ * atalw
+ * dependabot[bot]
+ * shamardy
+
+
+# 0.0.106 - 2022-04-03
+
+## API Updates
+ * Minimum supported rust version (MSRV) is now 1.41.1 (#1310).
+ * Lightning feature `option_scid_alias` is now supported and may be negotiated
+   when opening a channel with a peer. It can be configured via
+   `ChannelHandshakeConfig::negotiate_scid_privacy` and is off by default but
+   will be on by default in the future (#1351).
+ * `OpenChannelRequest` now has a `channel_type` field indicating the features
+   the channel will operate with and should be used to filter channels with
+   undesirable features (#1351). See the Serialization Compatibility section.
+ * `ChannelManager` supports sending and receiving short channel id aliases in
+   the `funding_locked` message. These are used when forwarding payments and
+   constructing invoice route hints for improved privacy. `ChannelDetails` has a
+   `inbound_scid_alias` field and a `get_inbound_payment_scid` method to support
+   the latter (#1311).
+ * `DefaultRouter` and `find_route` take an additional random seed to improve
+   privacy by adding a random CLTV expiry offset to each path's final hop. This
+   helps obscure the intended recipient from adversarial intermediate hops
+   (#1286). The seed is  also used to randomize candidate paths during route
+   selection (#1359).
+ * The `lightning-block-sync` crate's `init::synchronize_listeners` method
+   interface has been relaxed to support multithreaded environments (#1349).
+ * `ChannelManager::create_inbound_payment_for_hash`'s documentation has been
+   corrected to remove the one-year restriction on `invoice_expiry_delta_secs`,
+   which is only applicable to the deprecated `create_inbound_payment_legacy`
+   and `create_inbound_payment_for_hash_legacy` methods (#1341).
+ * `Features` mutator methods now take `self` by reference instead of by value
+   (#1331).
+ * The CLTV of the last hop in a path is now included when comparing against
+   `RouteParameters::max_total_cltv_expiry_delta` (#1358).
+ * Invoice creation functions in `lightning-invoice` crate's `utils` module
+   include versions that accept a description hash instead of only a description
+   (#1361).
+ * `RoutingMessageHandler::sync_routing_table` has been renamed `peer_connected`
+   (#1368).
+ * `MessageSendEvent::SendGossipTimestampFilter` has been added to indicate that
+   a `gossip_timestamp_filter` should be sent (#1368).
+ * `PeerManager` takes an optional `NetAddress` in `new_outbound_connection` and
+   `new_inbound_connection`, which is used to report back the remote address to
+   the connecting peer in the `init` message (#1326).
+ * `ChannelManager::accept_inbound_channel` now takes a `user_channel_id`, which
+   is used in a similar manner as in outbound channels. (#1381).
+ * `BackgroundProcessor` now persists `NetworkGraph` on a timer and upon
+   shutdown as part of a new `Persister` trait, which also includes
+   `ChannelManager` persistence (#1376).
+ * `ProbabilisticScoringParameters` now has a `base_penalty_msat` option, which
+   default to 500 msats. It is applied at each hop to help avoid longer paths
+   (#1375).
+ * `ProbabilisticScoringParameters::liquidity_penalty_multiplier_msat`'s default
+   value is now 40,000 msats instead of 10,000 msats (#1375).
+ * The `lightning` crate has a `grind_signatures` feature used to produce
+   signatures with low r-values for more predictable transaction weight. This
+   feature is on by default (#1388).
+ * `ProbabilisticScoringParameters` now has a `amount_penalty_multiplier_msat`
+   option, which is used to further penalize large amounts (#1399).
+ * `PhantomRouteHints`, `FixedPenaltyScorer`, and `ScoringParameters` now
+   implement `Clone` (#1346).
+
+## Bug Fixes
+ * Fixed a compilation error in `ProbabilisticScorer` under `--feature=no-std`
+   (#1347).
+ * Invoice creation functions in `lightning-invoice` crate's `utils` module
+   filter invoice hints in order to limit the invoice size (#1325).
+ * Fixed a bug where a `funding_locked` message was delayed by a block if the
+   funding transaction was confirmed while offline, depending on the ordering
+   of `Confirm::transactions_confirmed` calls when brought back online (#1363).
+ * Fixed a bug in `NetGraphMsgHandler` where it didn't continue to receive
+   gossip messages from peers after initial connection (#1368, #1382).
+ * `ChannelManager::timer_tick_occurred` will now timeout a received multi-path
+   payment (MPP) after three ticks if not received in full instead of waiting
+   until near the HTLC timeout block(#1353).
+ * Fixed an issue with `find_route` causing it to be overly aggressive in using
+   MPP over channels to the same first hop (#1370).
+ * Reduced time spent processing `channel_update` messages by checking
+   signatures after checking if no newer messages have already been processed
+   (#1380).
+ * Fixed a few issues in `find_route` which caused preferring paths with a
+   higher cost (#1398).
+ * Fixed an issue in `ProbabilisticScorer` where a channel with not enough
+   liquidity could still be used when retrying a failed payment if it was on a
+   path with an overall lower cost (#1399).
+
+## Serialization Compatibility
+ * Channels open with `option_scid_alias` negotiated will be incompatible with
+   prior releases (#1351). This may occur in the following cases:
+   * Outbound channels when `ChannelHandshakeConfig::negotiate_scid_privacy` is
+     enabled.
+   * Inbound channels when automatically accepted from an `OpenChannel` message
+     with a `channel_type` that has `ChannelTypeFeatures::supports_scid_privacy`
+     return true. See `UserConfig::accept_inbound_channels`.
+   * Inbound channels when manually accepted from an `OpenChannelRequest` with a
+     `channel_type` that has `ChannelTypeFeatures::supports_scid_privacy` return
+     true. See `UserConfig::manually_accept_inbound_channels`.
+
+In total, this release features 43 files changed, 4052 insertions, 1274
+deletions in 75 commits from 11 authors, in alphabetical order:
+ * Devrandom
+ * Duncan Dean
+ * Elias Rohrer
+ * Jeffrey Czyz
+ * Jurvis Tan
+ * Luiz Parreira
+ * Matt Corallo
+ * Omar Shamardy
+ * Viktor Tigerström
+ * dependabot[bot]
+ * psycho-pirate
+
+
 # 0.0.105 - 2022-02-28
 
 ## API Updates

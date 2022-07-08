@@ -24,7 +24,7 @@ lightning-persister = { path="./rust-lightning/lightning-persister" }
 lightning-background-processor = {  path="./rust-lightning/lightning-background-processor" }
 
 base64 = "0.13.0"
-bitcoin = "0.27"
+bitcoin = "0.28.1"
 bitcoin-bech32 = "0.12"
 libc = "0.2"
 bech32 = "0.8"

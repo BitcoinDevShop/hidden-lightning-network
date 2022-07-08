@@ -25,10 +25,10 @@ use prelude::*;
 pub mod chaininterface;
 pub mod chainmonitor;
 pub mod channelmonitor;
+pub mod transaction;
 pub mod keysinterface;
 pub(crate) mod onchaintx;
 pub(crate) mod package;
-pub mod transaction;
 
 /// The best known block as identified by its hash and height.
 #[derive(Clone, Copy, PartialEq)]
@@ -41,7 +41,10 @@ impl BestBlock {
 	/// Constructs a `BestBlock` that represents the genesis block at height 0 of the given
 	/// network.
 	pub fn from_genesis(network: Network) -> Self {
-		BestBlock { block_hash: genesis_block(network).header.block_hash(), height: 0 }
+		BestBlock {
+			block_hash: genesis_block(network).header.block_hash(),
+			height: 0,
+		}
 	}
 
 	/// Returns a `BestBlock` as identified by the given block hash and height.
@@ -50,14 +53,10 @@ impl BestBlock {
 	}
 
 	/// Returns the best block hash.
-	pub fn block_hash(&self) -> BlockHash {
-		self.block_hash
-	}
+	pub fn block_hash(&self) -> BlockHash { self.block_hash }
 
 	/// Returns the best block height.
-	pub fn height(&self) -> u32 {
-		self.height
-	}
+	pub fn height(&self) -> u32 { self.height }
 }
 
 /// An error when accessing the chain via [`Access`].
@@ -77,10 +76,8 @@ pub trait Access {
 	/// Returns an error if `genesis_hash` is for a different chain or if such a transaction output
 	/// is unknown.
 	///
-	/// [`short_channel_id`]: https://github.com/lightningnetwork/lightning-rfc/blob/master/07-routing-gossip.md#definition-of-short_channel_id
-	fn get_utxo(
-		&self, genesis_hash: &BlockHash, short_channel_id: u64,
-	) -> Result<TxOut, AccessError>;
+	/// [`short_channel_id`]: https://github.com/lightning/bolts/blob/master/07-routing-gossip.md#definition-of-short_channel_id
+	fn get_utxo(&self, genesis_hash: &BlockHash, short_channel_id: u64) -> Result<TxOut, AccessError>;
 }
 
 /// The `Listen` trait is used to notify when blocks have been connected or disconnected from the
@@ -90,9 +87,20 @@ pub trait Access {
 /// sourcing chain data using a block-oriented API should prefer this interface over [`Confirm`].
 /// Such clients fetch the entire header chain whereas clients using [`Confirm`] only fetch headers
 /// when needed.
+///
+/// By using [`Listen::filtered_block_connected`] this interface supports clients fetching the
+/// entire header chain and only blocks with matching transaction data using BIP 157 filters or
+/// other similar filtering.
 pub trait Listen {
+	/// Notifies the listener that a block was added at the given height, with the transaction data
+	/// possibly filtered.
+	fn filtered_block_connected(&self, header: &BlockHeader, txdata: &TransactionData, height: u32);
+
 	/// Notifies the listener that a block was added at the given height.
-	fn block_connected(&self, block: &Block, height: u32);
+	fn block_connected(&self, block: &Block, height: u32) {
+		let txdata: Vec<_> = block.txdata.iter().enumerate().collect();
+		self.filtered_block_connected(&block.header, &txdata, height);
+	}
 
 	/// Notifies the listener that a block was removed at the given height.
 	fn block_disconnected(&self, header: &BlockHeader, height: u32);
@@ -275,9 +283,7 @@ pub trait Watch<ChannelSigner: Sign> {
 	/// [`get_outputs_to_watch`]: channelmonitor::ChannelMonitor::get_outputs_to_watch
 	/// [`block_connected`]: channelmonitor::ChannelMonitor::block_connected
 	/// [`block_disconnected`]: channelmonitor::ChannelMonitor::block_disconnected
-	fn watch_channel(
-		&self, funding_txo: OutPoint, monitor: ChannelMonitor<ChannelSigner>,
-	) -> Result<(), ChannelMonitorUpdateErr>;
+	fn watch_channel(&self, funding_txo: OutPoint, monitor: ChannelMonitor<ChannelSigner>) -> Result<(), ChannelMonitorUpdateErr>;
 
 	/// Updates a channel identified by `funding_txo` by applying `update` to its monitor.
 	///
@@ -285,9 +291,7 @@ pub trait Watch<ChannelSigner: Sign> {
 	/// [`ChannelMonitorUpdateErr`] for invariants around returning an error.
 	///
 	/// [`update_monitor`]: channelmonitor::ChannelMonitor::update_monitor
-	fn update_channel(
-		&self, funding_txo: OutPoint, update: ChannelMonitorUpdate,
-	) -> Result<(), ChannelMonitorUpdateErr>;
+	fn update_channel(&self, funding_txo: OutPoint, update: ChannelMonitorUpdate) -> Result<(), ChannelMonitorUpdateErr>;
 
 	/// Returns any monitor events since the last call. Subsequent calls must only return new
 	/// events.
@@ -298,7 +302,7 @@ pub trait Watch<ChannelSigner: Sign> {
 	///
 	/// For details on asynchronous [`ChannelMonitor`] updating and returning
 	/// [`MonitorEvent::UpdateCompleted`] here, see [`ChannelMonitorUpdateErr::TemporaryFailure`].
-	fn release_pending_monitor_events(&self) -> Vec<MonitorEvent>;
+	fn release_pending_monitor_events(&self) -> Vec<(OutPoint, Vec<MonitorEvent>)>;
 }
 
 /// The `Filter` trait defines behavior for indicating chain activity of interest pertaining to
@@ -362,8 +366,8 @@ pub struct WatchedOutput {
 }
 
 impl<T: Listen> Listen for core::ops::Deref<Target = T> {
-	fn block_connected(&self, block: &Block, height: u32) {
-		(**self).block_connected(block, height);
+	fn filtered_block_connected(&self, header: &BlockHeader, txdata: &TransactionData, height: u32) {
+		(**self).filtered_block_connected(header, txdata, height);
 	}
 
 	fn block_disconnected(&self, header: &BlockHeader, height: u32) {
@@ -376,9 +380,9 @@ where
 	T::Target: Listen,
 	U::Target: Listen,
 {
-	fn block_connected(&self, block: &Block, height: u32) {
-		self.0.block_connected(block, height);
-		self.1.block_connected(block, height);
+	fn filtered_block_connected(&self, header: &BlockHeader, txdata: &TransactionData, height: u32) {
+		self.0.filtered_block_connected(header, txdata, height);
+		self.1.filtered_block_connected(header, txdata, height);
 	}
 
 	fn block_disconnected(&self, header: &BlockHeader, height: u32) {

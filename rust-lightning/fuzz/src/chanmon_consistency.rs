@@ -53,8 +53,8 @@ use lightning::routing::router::{Route, RouteHop};
 use utils::test_logger::{self, Output};
 use utils::test_persister::TestPersister;
 
-use bitcoin::secp256k1::key::{PublicKey,SecretKey};
-use bitcoin::secp256k1::recovery::RecoverableSignature;
+use bitcoin::secp256k1::{PublicKey,SecretKey};
+use bitcoin::secp256k1::ecdsa::RecoverableSignature;
 use bitcoin::secp256k1::Secp256k1;
 
 use std::mem;
@@ -148,7 +148,7 @@ impl chain::Watch<EnforcingSigner> for TestChainMonitor {
 		self.chain_monitor.update_channel(funding_txo, update)
 	}
 
-	fn release_pending_monitor_events(&self) -> Vec<MonitorEvent> {
+	fn release_pending_monitor_events(&self) -> Vec<(OutPoint, Vec<MonitorEvent>)> {
 		return self.chain_monitor.release_pending_monitor_events();
 	}
 }
@@ -356,8 +356,8 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 				Arc::new(TestPersister { update_ret: Mutex::new(Ok(())) }), Arc::clone(&keys_manager)));
 
 			let mut config = UserConfig::default();
-			config.channel_options.forwarding_fee_proportional_millionths = 0;
-			config.channel_options.announced_channel = true;
+			config.channel_config.forwarding_fee_proportional_millionths = 0;
+			config.channel_handshake_config.announced_channel = true;
 			let network = Network::Bitcoin;
 			let params = ChainParameters {
 				network,
@@ -376,8 +376,8 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 				Arc::new(TestPersister { update_ret: Mutex::new(Ok(())) }), Arc::clone(& $keys_manager)));
 
 			let mut config = UserConfig::default();
-			config.channel_options.forwarding_fee_proportional_millionths = 0;
-			config.channel_options.announced_channel = true;
+			config.channel_config.forwarding_fee_proportional_millionths = 0;
+			config.channel_handshake_config.announced_channel = true;
 
 			let mut monitors = HashMap::new();
 			let mut old_monitors = $old_monitors.latest_monitors.lock().unwrap();
@@ -411,8 +411,8 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 	let mut channel_txn = Vec::new();
 	macro_rules! make_channel {
 		($source: expr, $dest: expr, $chan_id: expr) => { {
-			$source.peer_connected(&$dest.get_our_node_id(), &Init { features: InitFeatures::known() });
-			$dest.peer_connected(&$source.get_our_node_id(), &Init { features: InitFeatures::known() });
+			$source.peer_connected(&$dest.get_our_node_id(), &Init { features: InitFeatures::known(), remote_network_address: None });
+			$dest.peer_connected(&$source.get_our_node_id(), &Init { features: InitFeatures::known(), remote_network_address: None });
 
 			$source.create_channel($dest.get_our_node_id(), 100_000, 42, 0, None).unwrap();
 			let open_channel = {
@@ -442,7 +442,7 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 						value: *channel_value_satoshis, script_pubkey: output_script.clone(),
 					}]};
 					funding_output = OutPoint { txid: tx.txid(), index: 0 };
-					$source.funding_transaction_generated(&temporary_channel_id, tx.clone()).unwrap();
+					$source.funding_transaction_generated(&temporary_channel_id, &$dest.get_our_node_id(), tx.clone()).unwrap();
 					channel_txn.push(tx);
 				} else { panic!("Wrong event type"); }
 			}
@@ -490,10 +490,10 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 			}
 			for (idx, node_event) in node_events.iter().enumerate() {
 				for event in node_event {
-					if let events::MessageSendEvent::SendFundingLocked { ref node_id, ref msg } = event {
+					if let events::MessageSendEvent::SendChannelReady { ref node_id, ref msg } = event {
 						for node in $nodes.iter() {
 							if node.get_our_node_id() == *node_id {
-								node.handle_funding_locked(&$nodes[idx].get_our_node_id(), msg);
+								node.handle_channel_ready(&$nodes[idx].get_our_node_id(), msg);
 							}
 						}
 					} else { panic!("Wrong event type"); }
@@ -597,7 +597,7 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 							if Some(*node_id) == expect_drop_id { panic!("peer_disconnected should drop msgs bound for the disconnected peer"); }
 							*node_id == a_id
 						},
-						events::MessageSendEvent::SendFundingLocked { .. } => continue,
+						events::MessageSendEvent::SendChannelReady { .. } => continue,
 						events::MessageSendEvent::SendAnnouncementSignatures { .. } => continue,
 						events::MessageSendEvent::SendChannelUpdate { ref node_id, ref msg } => {
 							assert_eq!(msg.contents.flags & 2, 0); // The disable bit must never be set!
@@ -725,7 +725,7 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 								}
 							}
 						},
-						events::MessageSendEvent::SendFundingLocked { .. } => {
+						events::MessageSendEvent::SendChannelReady { .. } => {
 							// Can be generated as a reestablish response
 						},
 						events::MessageSendEvent::SendAnnouncementSignatures { .. } => {
@@ -771,7 +771,7 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 							events::MessageSendEvent::UpdateHTLCs { .. } => {},
 							events::MessageSendEvent::SendRevokeAndACK { .. } => {},
 							events::MessageSendEvent::SendChannelReestablish { .. } => {},
-							events::MessageSendEvent::SendFundingLocked { .. } => {},
+							events::MessageSendEvent::SendChannelReady { .. } => {},
 							events::MessageSendEvent::SendAnnouncementSignatures { .. } => {},
 							events::MessageSendEvent::SendChannelUpdate { ref msg, .. } => {
 								assert_eq!(msg.contents.flags & 2, 0); // The disable bit must never be set!
@@ -792,7 +792,7 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 							events::MessageSendEvent::UpdateHTLCs { .. } => {},
 							events::MessageSendEvent::SendRevokeAndACK { .. } => {},
 							events::MessageSendEvent::SendChannelReestablish { .. } => {},
-							events::MessageSendEvent::SendFundingLocked { .. } => {},
+							events::MessageSendEvent::SendChannelReady { .. } => {},
 							events::MessageSendEvent::SendAnnouncementSignatures { .. } => {},
 							events::MessageSendEvent::SendChannelUpdate { ref msg, .. } => {
 								assert_eq!(msg.contents.flags & 2, 0); // The disable bit must never be set!
@@ -840,13 +840,14 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 						events::Event::PaymentReceived { payment_hash, .. } => {
 							if claim_set.insert(payment_hash.0) {
 								if $fail {
-									assert!(nodes[$node].fail_htlc_backwards(&payment_hash));
+									nodes[$node].fail_htlc_backwards(&payment_hash);
 								} else {
-									assert!(nodes[$node].claim_funds(PaymentPreimage(payment_hash.0)));
+									nodes[$node].claim_funds(PaymentPreimage(payment_hash.0));
 								}
 							}
 						},
 						events::Event::PaymentSent { .. } => {},
+						events::Event::PaymentClaimed { .. } => {},
 						events::Event::PaymentPathSuccessful { .. } => {},
 						events::Event::PaymentPathFailed { .. } => {},
 						events::Event::PaymentForwarded { .. } if $node == 1 => {},
@@ -921,15 +922,15 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 			},
 			0x0e => {
 				if chan_a_disconnected {
-					nodes[0].peer_connected(&nodes[1].get_our_node_id(), &Init { features: InitFeatures::known() });
-					nodes[1].peer_connected(&nodes[0].get_our_node_id(), &Init { features: InitFeatures::known() });
+					nodes[0].peer_connected(&nodes[1].get_our_node_id(), &Init { features: InitFeatures::known(), remote_network_address: None });
+					nodes[1].peer_connected(&nodes[0].get_our_node_id(), &Init { features: InitFeatures::known(), remote_network_address: None });
 					chan_a_disconnected = false;
 				}
 			},
 			0x0f => {
 				if chan_b_disconnected {
-					nodes[1].peer_connected(&nodes[2].get_our_node_id(), &Init { features: InitFeatures::known() });
-					nodes[2].peer_connected(&nodes[1].get_our_node_id(), &Init { features: InitFeatures::known() });
+					nodes[1].peer_connected(&nodes[2].get_our_node_id(), &Init { features: InitFeatures::known(), remote_network_address: None });
+					nodes[2].peer_connected(&nodes[1].get_our_node_id(), &Init { features: InitFeatures::known(), remote_network_address: None });
 					chan_b_disconnected = false;
 				}
 			},
@@ -1124,13 +1125,13 @@ pub fn do_test<Out: Output>(data: &[u8], underlying_out: Out) {
 
 				// Next, make sure peers are all connected to each other
 				if chan_a_disconnected {
-					nodes[0].peer_connected(&nodes[1].get_our_node_id(), &Init { features: InitFeatures::known() });
-					nodes[1].peer_connected(&nodes[0].get_our_node_id(), &Init { features: InitFeatures::known() });
+					nodes[0].peer_connected(&nodes[1].get_our_node_id(), &Init { features: InitFeatures::known(), remote_network_address: None });
+					nodes[1].peer_connected(&nodes[0].get_our_node_id(), &Init { features: InitFeatures::known(), remote_network_address: None });
 					chan_a_disconnected = false;
 				}
 				if chan_b_disconnected {
-					nodes[1].peer_connected(&nodes[2].get_our_node_id(), &Init { features: InitFeatures::known() });
-					nodes[2].peer_connected(&nodes[1].get_our_node_id(), &Init { features: InitFeatures::known() });
+					nodes[1].peer_connected(&nodes[2].get_our_node_id(), &Init { features: InitFeatures::known(), remote_network_address: None });
+					nodes[2].peer_connected(&nodes[1].get_our_node_id(), &Init { features: InitFeatures::known(), remote_network_address: None });
 					chan_b_disconnected = false;
 				}
 

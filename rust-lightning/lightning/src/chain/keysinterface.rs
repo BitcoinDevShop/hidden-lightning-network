@@ -11,12 +11,12 @@
 //! spendable on-chain outputs which the user owns and is responsible for using just as any other
 //! on-chain output which is theirs.
 
-use bitcoin::blockdata::transaction::{Transaction, TxOut, TxIn, SigHashType};
+use bitcoin::blockdata::transaction::{Transaction, TxOut, TxIn, EcdsaSighashType};
 use bitcoin::blockdata::script::{Script, Builder};
 use bitcoin::blockdata::opcodes;
 use bitcoin::network::constants::Network;
 use bitcoin::util::bip32::{ExtendedPrivKey, ExtendedPubKey, ChildNumber};
-use bitcoin::util::bip143;
+use bitcoin::util::sighash;
 
 use bitcoin::bech32::u5;
 use bitcoin::hashes::{Hash, HashEngine};
@@ -25,13 +25,13 @@ use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::sha256d::Hash as Sha256dHash;
 use bitcoin::hash_types::WPubkeyHash;
 
-use bitcoin::secp256k1::key::{SecretKey, PublicKey};
-use bitcoin::secp256k1::{Secp256k1, Signature, Signing};
-use bitcoin::secp256k1::recovery::RecoverableSignature;
-use bitcoin::secp256k1;
+use bitcoin::secp256k1::{SecretKey, PublicKey};
+use bitcoin::secp256k1::{Secp256k1, ecdsa::Signature, Signing};
+use bitcoin::secp256k1::ecdsa::RecoverableSignature;
+use bitcoin::{secp256k1, Witness};
 
 use util::{byte_utils, transaction_utils};
-use util::crypto::hkdf_extract_expand_twice;
+use util::crypto::{hkdf_extract_expand_twice, sign};
 use util::ser::{Writeable, Writer, Readable, ReadableArgs};
 
 use chain::transaction::OutPoint;
@@ -397,7 +397,9 @@ pub trait KeysInterface {
 	/// A type which implements Sign which will be returned by get_channel_signer.
 	type Signer : Sign;
 
-	/// Get node secret key (aka node_id or network_key) based on the provided [`Recipient`].
+	/// Get node secret key based on the provided [`Recipient`].
+	///
+	/// The node_id/network_key is the public key that corresponds to this secret key.
 	///
 	/// This method must return the same value each time it is called with a given `Recipient`
 	/// parameter.
@@ -588,16 +590,16 @@ impl InMemorySigner {
 		if spend_tx.input[input_idx].previous_output != descriptor.outpoint.into_bitcoin_outpoint() { return Err(()); }
 
 		let remotepubkey = self.pubkeys().payment_point;
-		let witness_script = bitcoin::Address::p2pkh(&::bitcoin::PublicKey{compressed: true, key: remotepubkey}, Network::Testnet).script_pubkey();
-		let sighash = hash_to_message!(&bip143::SigHashCache::new(spend_tx).signature_hash(input_idx, &witness_script, descriptor.output.value, SigHashType::All)[..]);
-		let remotesig = secp_ctx.sign(&sighash, &self.payment_key);
-		let payment_script = bitcoin::Address::p2wpkh(&::bitcoin::PublicKey{compressed: true, key: remotepubkey}, Network::Bitcoin).unwrap().script_pubkey();
+		let witness_script = bitcoin::Address::p2pkh(&::bitcoin::PublicKey{compressed: true, inner: remotepubkey}, Network::Testnet).script_pubkey();
+		let sighash = hash_to_message!(&sighash::SighashCache::new(spend_tx).segwit_signature_hash(input_idx, &witness_script, descriptor.output.value, EcdsaSighashType::All).unwrap()[..]);
+		let remotesig = sign(secp_ctx, &sighash, &self.payment_key);
+		let payment_script = bitcoin::Address::p2wpkh(&::bitcoin::PublicKey{compressed: true, inner: remotepubkey}, Network::Bitcoin).unwrap().script_pubkey();
 
 		if payment_script != descriptor.output.script_pubkey  { return Err(()); }
 
 		let mut witness = Vec::with_capacity(2);
 		witness.push(remotesig.serialize_der().to_vec());
-		witness[0].push(SigHashType::All as u8);
+		witness[0].push(EcdsaSighashType::All as u8);
 		witness.push(remotepubkey.serialize().to_vec());
 		Ok(witness)
 	}
@@ -623,15 +625,15 @@ impl InMemorySigner {
 			.expect("We constructed the payment_base_key, so we can only fail here if the RNG is busted.");
 		let delayed_payment_pubkey = PublicKey::from_secret_key(&secp_ctx, &delayed_payment_key);
 		let witness_script = chan_utils::get_revokeable_redeemscript(&descriptor.revocation_pubkey, descriptor.to_self_delay, &delayed_payment_pubkey);
-		let sighash = hash_to_message!(&bip143::SigHashCache::new(spend_tx).signature_hash(input_idx, &witness_script, descriptor.output.value, SigHashType::All)[..]);
-		let local_delayedsig = secp_ctx.sign(&sighash, &delayed_payment_key);
+		let sighash = hash_to_message!(&sighash::SighashCache::new(spend_tx).segwit_signature_hash(input_idx, &witness_script, descriptor.output.value, EcdsaSighashType::All).unwrap()[..]);
+		let local_delayedsig = sign(secp_ctx, &sighash, &delayed_payment_key);
 		let payment_script = bitcoin::Address::p2wsh(&witness_script, Network::Bitcoin).script_pubkey();
 
 		if descriptor.output.script_pubkey != payment_script { return Err(()); }
 
 		let mut witness = Vec::with_capacity(3);
 		witness.push(local_delayedsig.serialize_der().to_vec());
-		witness[0].push(SigHashType::All as u8);
+		witness[0].push(EcdsaSighashType::All as u8);
 		witness.push(vec!()); //MINIMALIF
 		witness.push(witness_script.clone().into_bytes());
 		Ok(witness)
@@ -670,10 +672,10 @@ impl BaseSign for InMemorySigner {
 		for htlc in commitment_tx.htlcs() {
 			let htlc_tx = chan_utils::build_htlc_transaction(&commitment_txid, commitment_tx.feerate_per_kw(), self.holder_selected_contest_delay(), htlc, self.opt_anchors(), &keys.broadcaster_delayed_payment_key, &keys.revocation_key);
 			let htlc_redeemscript = chan_utils::get_htlc_redeemscript(&htlc, self.opt_anchors(), &keys);
-			let htlc_sighashtype = if self.opt_anchors() { SigHashType::SinglePlusAnyoneCanPay } else { SigHashType::All };
-			let htlc_sighash = hash_to_message!(&bip143::SigHashCache::new(&htlc_tx).signature_hash(0, &htlc_redeemscript, htlc.amount_msat / 1000, htlc_sighashtype)[..]);
+			let htlc_sighashtype = if self.opt_anchors() { EcdsaSighashType::SinglePlusAnyoneCanPay } else { EcdsaSighashType::All };
+			let htlc_sighash = hash_to_message!(&sighash::SighashCache::new(&htlc_tx).segwit_signature_hash(0, &htlc_redeemscript, htlc.amount_msat / 1000, htlc_sighashtype).unwrap()[..]);
 			let holder_htlc_key = chan_utils::derive_private_key(&secp_ctx, &keys.per_commitment_point, &self.htlc_base_key).map_err(|_| ())?;
-			htlc_sigs.push(secp_ctx.sign(&htlc_sighash, &holder_htlc_key));
+			htlc_sigs.push(sign(secp_ctx, &htlc_sighash, &holder_htlc_key));
 		}
 
 		Ok((commitment_sig, htlc_sigs))
@@ -712,9 +714,9 @@ impl BaseSign for InMemorySigner {
 			let counterparty_delayedpubkey = chan_utils::derive_public_key(&secp_ctx, &per_commitment_point, &self.counterparty_pubkeys().delayed_payment_basepoint).map_err(|_| ())?;
 			chan_utils::get_revokeable_redeemscript(&revocation_pubkey, self.holder_selected_contest_delay(), &counterparty_delayedpubkey)
 		};
-		let mut sighash_parts = bip143::SigHashCache::new(justice_tx);
-		let sighash = hash_to_message!(&sighash_parts.signature_hash(input, &witness_script, amount, SigHashType::All)[..]);
-		return Ok(secp_ctx.sign(&sighash, &revocation_key))
+		let mut sighash_parts = sighash::SighashCache::new(justice_tx);
+		let sighash = hash_to_message!(&sighash_parts.segwit_signature_hash(input, &witness_script, amount, EcdsaSighashType::All).unwrap()[..]);
+		return Ok(sign(secp_ctx, &sighash, &revocation_key))
 	}
 
 	fn sign_justice_revoked_htlc(&self, justice_tx: &Transaction, input: usize, amount: u64, per_commitment_key: &SecretKey, htlc: &HTLCOutputInCommitment, secp_ctx: &Secp256k1<secp256k1::All>) -> Result<Signature, ()> {
@@ -726,9 +728,9 @@ impl BaseSign for InMemorySigner {
 			let holder_htlcpubkey = chan_utils::derive_public_key(&secp_ctx, &per_commitment_point, &self.pubkeys().htlc_basepoint).map_err(|_| ())?;
 			chan_utils::get_htlc_redeemscript_with_explicit_keys(&htlc, self.opt_anchors(), &counterparty_htlcpubkey, &holder_htlcpubkey, &revocation_pubkey)
 		};
-		let mut sighash_parts = bip143::SigHashCache::new(justice_tx);
-		let sighash = hash_to_message!(&sighash_parts.signature_hash(input, &witness_script, amount, SigHashType::All)[..]);
-		return Ok(secp_ctx.sign(&sighash, &revocation_key))
+		let mut sighash_parts = sighash::SighashCache::new(justice_tx);
+		let sighash = hash_to_message!(&sighash_parts.segwit_signature_hash(input, &witness_script, amount, EcdsaSighashType::All).unwrap()[..]);
+		return Ok(sign(secp_ctx, &sighash, &revocation_key))
 	}
 
 	fn sign_counterparty_htlc_transaction(&self, htlc_tx: &Transaction, input: usize, amount: u64, per_commitment_point: &PublicKey, htlc: &HTLCOutputInCommitment, secp_ctx: &Secp256k1<secp256k1::All>) -> Result<Signature, ()> {
@@ -740,9 +742,9 @@ impl BaseSign for InMemorySigner {
 					} else { return Err(()) }
 				} else { return Err(()) }
 			} else { return Err(()) };
-			let mut sighash_parts = bip143::SigHashCache::new(htlc_tx);
-			let sighash = hash_to_message!(&sighash_parts.signature_hash(input, &witness_script, amount, SigHashType::All)[..]);
-			return Ok(secp_ctx.sign(&sighash, &htlc_key))
+			let mut sighash_parts = sighash::SighashCache::new(htlc_tx);
+			let sighash = hash_to_message!(&sighash_parts.segwit_signature_hash(input, &witness_script, amount, EcdsaSighashType::All).unwrap()[..]);
+			return Ok(sign(secp_ctx, &sighash, &htlc_key))
 		}
 		Err(())
 	}
@@ -756,7 +758,7 @@ impl BaseSign for InMemorySigner {
 	fn sign_channel_announcement(&self, msg: &UnsignedChannelAnnouncement, secp_ctx: &Secp256k1<secp256k1::All>)
 	-> Result<(Signature, Signature), ()> {
 		let msghash = hash_to_message!(&Sha256dHash::hash(&msg.encode()[..])[..]);
-		Ok((secp_ctx.sign(&msghash, &self.node_secret), secp_ctx.sign(&msghash, &self.funding_key)))
+		Ok((sign(secp_ctx, &msghash, &self.node_secret), sign(secp_ctx, &msghash, &self.funding_key)))
 	}
 
 	fn ready_channel(&mut self, channel_parameters: &ChannelTransactionParameters) {
@@ -884,10 +886,10 @@ impl KeysManager {
 		// Note that when we aren't serializing the key, network doesn't matter
 		match ExtendedPrivKey::new_master(Network::Testnet, seed) {
 			Ok(master_key) => {
-				let node_secret = master_key.ckd_priv(&secp_ctx, ChildNumber::from_hardened_idx(0).unwrap()).expect("Your RNG is busted").private_key.key;
+				let node_secret = master_key.ckd_priv(&secp_ctx, ChildNumber::from_hardened_idx(0).unwrap()).expect("Your RNG is busted").private_key;
 				let destination_script = match master_key.ckd_priv(&secp_ctx, ChildNumber::from_hardened_idx(1).unwrap()) {
 					Ok(destination_key) => {
-						let wpubkey_hash = WPubkeyHash::hash(&ExtendedPubKey::from_private(&secp_ctx, &destination_key).public_key.to_bytes());
+						let wpubkey_hash = WPubkeyHash::hash(&ExtendedPubKey::from_priv(&secp_ctx, &destination_key).to_pub().to_bytes());
 						Builder::new().push_opcode(opcodes::all::OP_PUSHBYTES_0)
 						              .push_slice(&wpubkey_hash.into_inner())
 						              .into_script()
@@ -895,12 +897,12 @@ impl KeysManager {
 					Err(_) => panic!("Your RNG is busted"),
 				};
 				let shutdown_pubkey = match master_key.ckd_priv(&secp_ctx, ChildNumber::from_hardened_idx(2).unwrap()) {
-					Ok(shutdown_key) => ExtendedPubKey::from_private(&secp_ctx, &shutdown_key).public_key.key,
+					Ok(shutdown_key) => ExtendedPubKey::from_priv(&secp_ctx, &shutdown_key).public_key,
 					Err(_) => panic!("Your RNG is busted"),
 				};
 				let channel_master_key = master_key.ckd_priv(&secp_ctx, ChildNumber::from_hardened_idx(3).unwrap()).expect("Your RNG is busted");
 				let rand_bytes_master_key = master_key.ckd_priv(&secp_ctx, ChildNumber::from_hardened_idx(4).unwrap()).expect("Your RNG is busted");
-				let inbound_payment_key: SecretKey = master_key.ckd_priv(&secp_ctx, ChildNumber::from_hardened_idx(5).unwrap()).expect("Your RNG is busted").private_key.key;
+				let inbound_payment_key: SecretKey = master_key.ckd_priv(&secp_ctx, ChildNumber::from_hardened_idx(5).unwrap()).expect("Your RNG is busted").private_key;
 				let mut inbound_pmt_key_bytes = [0; 32];
 				inbound_pmt_key_bytes.copy_from_slice(&inbound_payment_key[..]);
 
@@ -951,7 +953,7 @@ impl KeysManager {
 		// entropy, everything else just ensures uniqueness. We rely on the unique_start (ie
 		// starting_time provided in the constructor) to be unique.
 		let child_privkey = self.channel_master_key.ckd_priv(&self.secp_ctx, ChildNumber::from_hardened_idx(chan_id as u32).expect("key space exhausted")).expect("Your RNG is busted");
-		unique_start.input(&child_privkey.private_key.key[..]);
+		unique_start.input(&child_privkey.private_key[..]);
 
 		let seed = Sha256::from_engine(unique_start).into_inner();
 
@@ -1014,7 +1016,7 @@ impl KeysManager {
 						previous_output: descriptor.outpoint.into_bitcoin_outpoint(),
 						script_sig: Script::new(),
 						sequence: 0,
-						witness: Vec::new(),
+						witness: Witness::new(),
 					});
 					witness_weight += StaticPaymentOutputDescriptor::MAX_WITNESS_LENGTH;
 					input_value += descriptor.output.value;
@@ -1025,7 +1027,7 @@ impl KeysManager {
 						previous_output: descriptor.outpoint.into_bitcoin_outpoint(),
 						script_sig: Script::new(),
 						sequence: descriptor.to_self_delay as u32,
-						witness: Vec::new(),
+						witness: Witness::new(),
 					});
 					witness_weight += DelayedPaymentOutputDescriptor::MAX_WITNESS_LENGTH;
 					input_value += descriptor.output.value;
@@ -1036,7 +1038,7 @@ impl KeysManager {
 						previous_output: outpoint.into_bitcoin_outpoint(),
 						script_sig: Script::new(),
 						sequence: 0,
-						witness: Vec::new(),
+						witness: Witness::new(),
 					});
 					witness_weight += 1 + 73 + 34;
 					input_value += output.value;
@@ -1064,7 +1066,7 @@ impl KeysManager {
 							self.derive_channel_keys(descriptor.channel_value_satoshis, &descriptor.channel_keys_id),
 							descriptor.channel_keys_id));
 					}
-					spend_tx.input[input_idx].witness = keys_cache.as_ref().unwrap().0.sign_counterparty_payment_input(&spend_tx, input_idx, &descriptor, &secp_ctx)?;
+					spend_tx.input[input_idx].witness = Witness::from_vec(keys_cache.as_ref().unwrap().0.sign_counterparty_payment_input(&spend_tx, input_idx, &descriptor, &secp_ctx)?);
 				},
 				SpendableOutputDescriptor::DelayedPaymentOutput(descriptor) => {
 					if keys_cache.is_none() || keys_cache.as_ref().unwrap().1 != descriptor.channel_keys_id {
@@ -1072,7 +1074,7 @@ impl KeysManager {
 							self.derive_channel_keys(descriptor.channel_value_satoshis, &descriptor.channel_keys_id),
 							descriptor.channel_keys_id));
 					}
-					spend_tx.input[input_idx].witness = keys_cache.as_ref().unwrap().0.sign_dynamic_p2wsh_input(&spend_tx, input_idx, &descriptor, &secp_ctx)?;
+					spend_tx.input[input_idx].witness = Witness::from_vec(keys_cache.as_ref().unwrap().0.sign_dynamic_p2wsh_input(&spend_tx, input_idx, &descriptor, &secp_ctx)?);
 				},
 				SpendableOutputDescriptor::StaticOutput { ref output, .. } => {
 					let derivation_idx = if output.script_pubkey == self.destination_script {
@@ -1092,29 +1094,30 @@ impl KeysManager {
 							Err(_) => panic!("Your rng is busted"),
 						}
 					};
-					let pubkey = ExtendedPubKey::from_private(&secp_ctx, &secret).public_key;
+					let pubkey = ExtendedPubKey::from_priv(&secp_ctx, &secret).to_pub();
 					if derivation_idx == 2 {
-						assert_eq!(pubkey.key, self.shutdown_pubkey);
+						assert_eq!(pubkey.inner, self.shutdown_pubkey);
 					}
 					let witness_script = bitcoin::Address::p2pkh(&pubkey, Network::Testnet).script_pubkey();
 					let payment_script = bitcoin::Address::p2wpkh(&pubkey, Network::Testnet).expect("uncompressed key found").script_pubkey();
 
 					if payment_script != output.script_pubkey { return Err(()); };
 
-					let sighash = hash_to_message!(&bip143::SigHashCache::new(&spend_tx).signature_hash(input_idx, &witness_script, output.value, SigHashType::All)[..]);
-					let sig = secp_ctx.sign(&sighash, &secret.private_key.key);
-					spend_tx.input[input_idx].witness.push(sig.serialize_der().to_vec());
-					spend_tx.input[input_idx].witness[0].push(SigHashType::All as u8);
-					spend_tx.input[input_idx].witness.push(pubkey.key.serialize().to_vec());
+					let sighash = hash_to_message!(&sighash::SighashCache::new(&spend_tx).segwit_signature_hash(input_idx, &witness_script, output.value, EcdsaSighashType::All).unwrap()[..]);
+					let sig = sign(secp_ctx, &sighash, &secret.private_key);
+					let mut sig_ser = sig.serialize_der().to_vec();
+					sig_ser.push(EcdsaSighashType::All as u8);
+					spend_tx.input[input_idx].witness.push(sig_ser);
+					spend_tx.input[input_idx].witness.push(pubkey.inner.serialize().to_vec());
 				},
 			}
 			input_idx += 1;
 		}
 
-		debug_assert!(expected_max_weight >= spend_tx.get_weight());
+		debug_assert!(expected_max_weight >= spend_tx.weight());
 		// Note that witnesses with a signature vary somewhat in size, so allow
 		// `expected_max_weight` to overshoot by up to 3 bytes per input.
-		debug_assert!(expected_max_weight <= spend_tx.get_weight() + descriptors.len() * 3);
+		debug_assert!(expected_max_weight <= spend_tx.weight() + descriptors.len() * 3);
 
 		Ok(spend_tx)
 	}
@@ -1157,7 +1160,7 @@ impl KeysInterface for KeysManager {
 
 		let child_ix = self.rand_bytes_child_index.fetch_add(1, Ordering::AcqRel);
 		let child_privkey = self.rand_bytes_master_key.ckd_priv(&self.secp_ctx, ChildNumber::from_hardened_idx(child_ix as u32).expect("key space exhausted")).expect("Your RNG is busted");
-		sha.input(&child_privkey.private_key.key[..]);
+		sha.input(&child_privkey.private_key[..]);
 
 		sha.input(b"Unique Secure Random Bytes Salt");
 		Sha256::from_engine(sha).into_inner()
@@ -1173,7 +1176,7 @@ impl KeysInterface for KeysManager {
 			Recipient::Node => self.get_node_secret(Recipient::Node)?,
 			Recipient::PhantomNode => return Err(()),
 		};
-		Ok(self.secp_ctx.sign_recoverable(&hash_to_message!(&Sha256::hash(&preimage)), &secret))
+		Ok(self.secp_ctx.sign_ecdsa_recoverable(&hash_to_message!(&Sha256::hash(&preimage)), &secret))
 	}
 }
 
@@ -1241,7 +1244,7 @@ impl KeysInterface for PhantomKeysManager {
 	fn sign_invoice(&self, hrp_bytes: &[u8], invoice_data: &[u5], recipient: Recipient) -> Result<RecoverableSignature, ()> {
 		let preimage = construct_invoice_preimage(&hrp_bytes, &invoice_data);
 		let secret = self.get_node_secret(recipient)?;
-		Ok(self.inner.secp_ctx.sign_recoverable(&hash_to_message!(&Sha256::hash(&preimage)), &secret))
+		Ok(self.inner.secp_ctx.sign_ecdsa_recoverable(&hash_to_message!(&Sha256::hash(&preimage)), &secret))
 	}
 }
 

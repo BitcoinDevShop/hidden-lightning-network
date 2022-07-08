@@ -61,7 +61,7 @@ pub fn scid_from_parts(block: u64, tx_index: u64, vout_index: u64) -> Result<u64
 }
 
 /// LDK has multiple reasons to generate fake short channel ids:
-/// 1) zero-conf channels that don't have a confirmed channel id yet
+/// 1) outbound SCID aliases we use for private channels
 /// 2) phantom node payments, to get an scid for the phantom node's phantom channel
 pub(crate) mod fake_scid {
 	use bitcoin::hash_types::BlockHash;
@@ -79,14 +79,18 @@ pub(crate) mod fake_scid {
 	const MAX_NAMESPACES: u8 = 8; // We allocate 3 bits for the namespace identifier.
 	const NAMESPACE_ID_BITMASK: u8 = 0b111;
 
+	const BLOCKS_PER_MONTH: u32 = 144 /* blocks per day */ * 30 /* days per month */;
+	pub(crate) const MAX_SCID_BLOCKS_FROM_NOW: u32 = BLOCKS_PER_MONTH;
+
+
 	/// Fake scids are divided into namespaces, with each namespace having its own identifier between
 	/// [0..7]. This allows us to identify what namespace a fake scid corresponds to upon HTLC
 	/// receipt, and handle the HTLC accordingly. The namespace identifier is encrypted when encoded
 	/// into the fake scid.
 	#[derive(Copy, Clone)]
-	pub(super) enum Namespace {
+	pub(crate) enum Namespace {
 		Phantom,
-		// Coming soon: a variant for the zero-conf scid namespace
+		OutboundAlias,
 	}
 
 	impl Namespace {
@@ -94,13 +98,12 @@ pub(crate) mod fake_scid {
 		/// between segwit activation and the current best known height, and the tx index and output
 		/// index are also selected from a "reasonable" range. We add this logic because it makes it
 		/// non-obvious at a glance that the scid is fake, e.g. if it appears in invoice route hints.
-		pub(super) fn get_fake_scid<Signer: Sign, K: Deref>(&self, highest_seen_blockheight: u32, genesis_hash: &BlockHash, fake_scid_rand_bytes: &[u8; 32], keys_manager: &K) -> u64
+		pub(crate) fn get_fake_scid<Signer: Sign, K: Deref>(&self, highest_seen_blockheight: u32, genesis_hash: &BlockHash, fake_scid_rand_bytes: &[u8; 32], keys_manager: &K) -> u64
 			where K::Target: KeysInterface<Signer = Signer>,
 		{
 			// Ensure we haven't created a namespace that doesn't fit into the 3 bits we've allocated for
 			// namespaces.
 			assert!((*self as u8) < MAX_NAMESPACES);
-			const BLOCKS_PER_MONTH: u32 = 144 /* blocks per day */ * 30 /* days per month */;
 			let rand_bytes = keys_manager.get_secure_random_bytes();
 
 			let segwit_activation_height = segwit_activation_height(genesis_hash);
@@ -109,7 +112,7 @@ pub(crate) mod fake_scid {
 			// We want to ensure that this fake channel won't conflict with any transactions we haven't
 			// seen yet, in case `highest_seen_blockheight` is updated before we get full information
 			// about transactions confirmed in the given block.
-			blocks_since_segwit_activation = blocks_since_segwit_activation.saturating_sub(BLOCKS_PER_MONTH);
+			blocks_since_segwit_activation = blocks_since_segwit_activation.saturating_sub(MAX_SCID_BLOCKS_FROM_NOW);
 
 			let rand_for_height = u32::from_be_bytes(rand_bytes[..4].try_into().unwrap());
 			let fake_scid_height = segwit_activation_height + rand_for_height % (blocks_since_segwit_activation + 1);
@@ -136,13 +139,6 @@ pub(crate) mod fake_scid {
 			chacha.process_in_place(&mut vout_byte);
 			vout_byte[0] & NAMESPACE_ID_BITMASK
 		}
-	}
-
-	pub fn get_phantom_scid<Signer: Sign, K: Deref>(fake_scid_rand_bytes: &[u8; 32], highest_seen_blockheight: u32, genesis_hash: &BlockHash, keys_manager: &K) -> u64
-		where K::Target: KeysInterface<Signer = Signer>,
-	{
-		let namespace = Namespace::Phantom;
-		namespace.get_fake_scid(highest_seen_blockheight, genesis_hash, fake_scid_rand_bytes, keys_manager)
 	}
 
 	fn segwit_activation_height(genesis: &BlockHash) -> u32 {

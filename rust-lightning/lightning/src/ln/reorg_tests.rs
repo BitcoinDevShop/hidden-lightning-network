@@ -60,10 +60,11 @@ fn do_test_onchain_htlc_reorg(local_commitment: bool, claim: bool) {
 	connect_blocks(&nodes[1], 2*CHAN_CONFIRM_DEPTH + 1 - nodes[1].best_block_info().1);
 	connect_blocks(&nodes[2], 2*CHAN_CONFIRM_DEPTH + 1 - nodes[2].best_block_info().1);
 
-	let (our_payment_preimage, our_payment_hash, _) = route_payment(&nodes[0], &[&nodes[1], &nodes[2]], 1000000);
+	let (our_payment_preimage, our_payment_hash, _) = route_payment(&nodes[0], &[&nodes[1], &nodes[2]], 1_000_000);
 
 	// Provide preimage to node 2 by claiming payment
 	nodes[2].node.claim_funds(our_payment_preimage);
+	expect_payment_claimed!(nodes[2], our_payment_hash, 1_000_000);
 	check_added_monitors!(nodes[2], 1);
 	get_htlc_update_msgs!(nodes[2], nodes[1].node.get_our_node_id());
 
@@ -138,7 +139,7 @@ fn do_test_onchain_htlc_reorg(local_commitment: bool, claim: bool) {
 		// ChannelManager only polls chain::Watch::release_pending_monitor_events when we
 		// probe it for events, so we probe non-message events here (which should just be the
 		// PaymentForwarded event).
-		expect_payment_forwarded!(nodes[1], Some(1000), true);
+		expect_payment_forwarded!(nodes[1], nodes[0], nodes[2], Some(1000), true, true);
 	} else {
 		// Confirm the timeout tx and check that we fail the HTLC backwards
 		let block = Block {
@@ -184,6 +185,77 @@ fn test_onchain_htlc_timeout_delay_remote_commitment() {
 	do_test_onchain_htlc_reorg(false, false);
 }
 
+#[test]
+fn test_counterparty_revoked_reorg() {
+	// Test what happens when a revoked counterparty transaction is broadcast but then reorg'd out
+	// of the main chain. Specifically, HTLCs in the latest commitment transaction which are not
+	// included in the revoked commitment transaction should not be considered failed, and should
+	// still be claim-from-able after the reorg.
+	let chanmon_cfgs = create_chanmon_cfgs(2);
+	let node_cfgs = create_node_cfgs(2, &chanmon_cfgs);
+	let node_chanmgrs = create_node_chanmgrs(2, &node_cfgs, &[None, None]);
+	let nodes = create_network(2, &node_cfgs, &node_chanmgrs);
+
+	let chan = create_announced_chan_between_nodes_with_value(&nodes, 0, 1, 1_000_000, 500_000_000, InitFeatures::known(), InitFeatures::known());
+
+	// Get the initial commitment transaction for broadcast, before any HTLCs are added at all.
+	let revoked_local_txn = get_local_commitment_txn!(nodes[0], chan.2);
+	assert_eq!(revoked_local_txn.len(), 1);
+
+	// Now add two HTLCs in each direction, one dust and one not.
+	route_payment(&nodes[0], &[&nodes[1]], 5_000_000);
+	route_payment(&nodes[0], &[&nodes[1]], 5_000);
+	let (payment_preimage_3, payment_hash_3, ..) = route_payment(&nodes[1], &[&nodes[0]], 4_000_000);
+	let payment_hash_4 = route_payment(&nodes[1], &[&nodes[0]], 4_000).1;
+
+	nodes[0].node.claim_funds(payment_preimage_3);
+	let _ = get_htlc_update_msgs!(nodes[0], nodes[1].node.get_our_node_id());
+	check_added_monitors!(nodes[0], 1);
+	expect_payment_claimed!(nodes[0], payment_hash_3, 4_000_000);
+
+	let mut unrevoked_local_txn = get_local_commitment_txn!(nodes[0], chan.2);
+	assert_eq!(unrevoked_local_txn.len(), 3); // commitment + 2 HTLC txn
+	// Sort the unrevoked transactions in reverse order, ie commitment tx, then HTLC 1 then HTLC 3
+	unrevoked_local_txn.sort_unstable_by_key(|tx| 1_000_000 - tx.output.iter().map(|outp| outp.value).sum::<u64>());
+
+	// Now mine A's old commitment transaction, which should close the channel, but take no action
+	// on any of the HTLCs, at least until we get six confirmations (which we won't get).
+	mine_transaction(&nodes[1], &revoked_local_txn[0]);
+	check_added_monitors!(nodes[1], 1);
+	check_closed_event!(nodes[1], 1, ClosureReason::CommitmentTxConfirmed);
+	check_closed_broadcast!(nodes[1], true);
+
+	// Connect up to one block before the revoked transaction would be considered final, then do a
+	// reorg that disconnects the full chain and goes up to the height at which the revoked
+	// transaction would be final.
+	let theoretical_conf_height = nodes[1].best_block_info().1 + ANTI_REORG_DELAY - 1;
+	connect_blocks(&nodes[1], ANTI_REORG_DELAY - 2);
+	assert!(nodes[1].node.get_and_clear_pending_msg_events().is_empty());
+	assert!(nodes[1].node.get_and_clear_pending_events().is_empty());
+
+	disconnect_all_blocks(&nodes[1]);
+	assert!(nodes[1].node.get_and_clear_pending_msg_events().is_empty());
+	assert!(nodes[1].node.get_and_clear_pending_events().is_empty());
+
+	connect_blocks(&nodes[1], theoretical_conf_height);
+	assert!(nodes[1].node.get_and_clear_pending_msg_events().is_empty());
+	assert!(nodes[1].node.get_and_clear_pending_events().is_empty());
+
+	// Now connect A's latest commitment transaction instead and resolve the HTLCs
+	mine_transaction(&nodes[1], &unrevoked_local_txn[0]);
+	assert!(nodes[1].node.get_and_clear_pending_msg_events().is_empty());
+	assert!(nodes[1].node.get_and_clear_pending_events().is_empty());
+
+	// Connect the HTLC claim transaction for HTLC 3
+	mine_transaction(&nodes[1], &unrevoked_local_txn[2]);
+	expect_payment_sent!(nodes[1], payment_preimage_3);
+	assert!(nodes[1].node.get_and_clear_pending_msg_events().is_empty());
+
+	// Connect blocks to confirm the unrevoked commitment transaction
+	connect_blocks(&nodes[1], ANTI_REORG_DELAY - 2);
+	expect_payment_failed!(nodes[1], payment_hash_4, true);
+}
+
 fn do_test_unconf_chan(reload_node: bool, reorg_after_reload: bool, use_funding_unconfirmed: bool, connect_style: ConnectStyle) {
 	// After creating a chan between nodes, we disconnect all blocks previously seen to force a
 	// channel close on nodes[0] side. We also use this to provide very basic testing of logic
@@ -201,7 +273,7 @@ fn do_test_unconf_chan(reload_node: bool, reorg_after_reload: bool, use_funding_
 
 	let channel_state = nodes[0].node.channel_state.lock().unwrap();
 	assert_eq!(channel_state.by_id.len(), 1);
-	assert_eq!(channel_state.short_to_id.len(), 1);
+	assert_eq!(channel_state.short_to_id.len(), 2);
 	mem::drop(channel_state);
 
 	if !reorg_after_reload {
@@ -209,14 +281,14 @@ fn do_test_unconf_chan(reload_node: bool, reorg_after_reload: bool, use_funding_
 			let relevant_txids = nodes[0].node.get_relevant_txids();
 			assert_eq!(&relevant_txids[..], &[chan.3.txid()]);
 			nodes[0].node.transaction_unconfirmed(&relevant_txids[0]);
+		} else if connect_style == ConnectStyle::FullBlockViaListen {
+			disconnect_blocks(&nodes[0], CHAN_CONFIRM_DEPTH - 1);
+			assert_eq!(nodes[0].node.list_usable_channels().len(), 1);
+			disconnect_blocks(&nodes[0], 1);
 		} else {
 			disconnect_all_blocks(&nodes[0]);
 		}
-		if connect_style == ConnectStyle::FullBlockViaListen && !use_funding_unconfirmed {
-			handle_announce_close_broadcast_events(&nodes, 0, 1, true, "Channel closed because of an exception: Funding transaction was un-confirmed. Locked at 6 confs, now have 2 confs.");
-		} else {
-			handle_announce_close_broadcast_events(&nodes, 0, 1, true, "Channel closed because of an exception: Funding transaction was un-confirmed. Locked at 6 confs, now have 0 confs.");
-		}
+		handle_announce_close_broadcast_events(&nodes, 0, 1, true, "Channel closed because of an exception: Funding transaction was un-confirmed. Locked at 6 confs, now have 0 confs.");
 		check_added_monitors!(nodes[1], 1);
 		{
 			let channel_state = nodes[0].node.channel_state.lock().unwrap();
@@ -277,14 +349,14 @@ fn do_test_unconf_chan(reload_node: bool, reorg_after_reload: bool, use_funding_
 			let relevant_txids = nodes[0].node.get_relevant_txids();
 			assert_eq!(&relevant_txids[..], &[chan.3.txid()]);
 			nodes[0].node.transaction_unconfirmed(&relevant_txids[0]);
+		} else if connect_style == ConnectStyle::FullBlockViaListen {
+			disconnect_blocks(&nodes[0], CHAN_CONFIRM_DEPTH - 1);
+			assert_eq!(nodes[0].node.list_channels().len(), 1);
+			disconnect_blocks(&nodes[0], 1);
 		} else {
 			disconnect_all_blocks(&nodes[0]);
 		}
-		if connect_style == ConnectStyle::FullBlockViaListen && !use_funding_unconfirmed {
-			handle_announce_close_broadcast_events(&nodes, 0, 1, true, "Channel closed because of an exception: Funding transaction was un-confirmed. Locked at 6 confs, now have 2 confs.");
-		} else {
-			handle_announce_close_broadcast_events(&nodes, 0, 1, true, "Channel closed because of an exception: Funding transaction was un-confirmed. Locked at 6 confs, now have 0 confs.");
-		}
+		handle_announce_close_broadcast_events(&nodes, 0, 1, true, "Channel closed because of an exception: Funding transaction was un-confirmed. Locked at 6 confs, now have 0 confs.");
 		check_added_monitors!(nodes[1], 1);
 		{
 			let channel_state = nodes[0].node.channel_state.lock().unwrap();
@@ -297,11 +369,7 @@ fn do_test_unconf_chan(reload_node: bool, reorg_after_reload: bool, use_funding_
 	*nodes[0].chain_monitor.expect_channel_force_closed.lock().unwrap() = Some((chan.2, true));
 	nodes[0].node.test_process_background_events(); // Required to free the pending background monitor update
 	check_added_monitors!(nodes[0], 1);
-	let expected_err = if connect_style == ConnectStyle::FullBlockViaListen && !use_funding_unconfirmed {
-		"Funding transaction was un-confirmed. Locked at 6 confs, now have 2 confs."
-	} else {
-		"Funding transaction was un-confirmed. Locked at 6 confs, now have 0 confs."
-	};
+	let expected_err = "Funding transaction was un-confirmed. Locked at 6 confs, now have 0 confs.";
 	check_closed_event!(nodes[1], 1, ClosureReason::CounterpartyForceClosed { peer_msg: "Channel closed because of an exception: ".to_owned() + expected_err });
 	check_closed_event!(nodes[0], 1, ClosureReason::ProcessingError { err: expected_err.to_owned() });
 	assert_eq!(nodes[0].tx_broadcaster.txn_broadcasted.lock().unwrap().len(), 1);
@@ -318,6 +386,11 @@ fn test_unconf_chan() {
 	do_test_unconf_chan(false, true, false, ConnectStyle::BestBlockFirstSkippingBlocks);
 	do_test_unconf_chan(true, false, false, ConnectStyle::BestBlockFirstSkippingBlocks);
 	do_test_unconf_chan(false, false, false, ConnectStyle::BestBlockFirstSkippingBlocks);
+
+	do_test_unconf_chan(true, true, false, ConnectStyle::BestBlockFirstReorgsOnlyTip);
+	do_test_unconf_chan(false, true, false, ConnectStyle::BestBlockFirstReorgsOnlyTip);
+	do_test_unconf_chan(true, false, false, ConnectStyle::BestBlockFirstReorgsOnlyTip);
+	do_test_unconf_chan(false, false, false, ConnectStyle::BestBlockFirstReorgsOnlyTip);
 }
 
 #[test]
@@ -334,6 +407,11 @@ fn test_unconf_chan_via_funding_unconfirmed() {
 	do_test_unconf_chan(false, true, true, ConnectStyle::BestBlockFirstSkippingBlocks);
 	do_test_unconf_chan(true, false, true, ConnectStyle::BestBlockFirstSkippingBlocks);
 	do_test_unconf_chan(false, false, true, ConnectStyle::BestBlockFirstSkippingBlocks);
+
+	do_test_unconf_chan(true, true, true, ConnectStyle::BestBlockFirstReorgsOnlyTip);
+	do_test_unconf_chan(false, true, true, ConnectStyle::BestBlockFirstReorgsOnlyTip);
+	do_test_unconf_chan(true, false, true, ConnectStyle::BestBlockFirstReorgsOnlyTip);
+	do_test_unconf_chan(false, false, true, ConnectStyle::BestBlockFirstReorgsOnlyTip);
 
 	do_test_unconf_chan(true, true, true, ConnectStyle::FullBlockViaListen);
 	do_test_unconf_chan(false, true, true, ConnectStyle::FullBlockViaListen);
@@ -352,8 +430,8 @@ fn test_set_outpoints_partial_claiming() {
 	let nodes = create_network(2, &node_cfgs, &node_chanmgrs);
 
 	let chan = create_announced_chan_between_nodes_with_value(&nodes, 0, 1, 1000000, 59000000, InitFeatures::known(), InitFeatures::known());
-	let payment_preimage_1 = route_payment(&nodes[1], &vec!(&nodes[0])[..], 3_000_000).0;
-	let payment_preimage_2 = route_payment(&nodes[1], &vec!(&nodes[0])[..], 3_000_000).0;
+	let (payment_preimage_1, payment_hash_1, _) = route_payment(&nodes[1], &[&nodes[0]], 3_000_000);
+	let (payment_preimage_2, payment_hash_2, _) = route_payment(&nodes[1], &[&nodes[0]], 3_000_000);
 
 	// Remote commitment txn with 4 outputs: to_local, to_remote, 2 outgoing HTLC
 	let remote_txn = get_local_commitment_txn!(nodes[1], chan.2);
@@ -367,9 +445,10 @@ fn test_set_outpoints_partial_claiming() {
 	// Connect blocks on node A to advance height towards TEST_FINAL_CLTV
 	// Provide node A with both preimage
 	nodes[0].node.claim_funds(payment_preimage_1);
+	expect_payment_claimed!(nodes[0], payment_hash_1, 3_000_000);
 	nodes[0].node.claim_funds(payment_preimage_2);
+	expect_payment_claimed!(nodes[0], payment_hash_2, 3_000_000);
 	check_added_monitors!(nodes[0], 2);
-	nodes[0].node.get_and_clear_pending_events();
 	nodes[0].node.get_and_clear_pending_msg_events();
 
 	// Connect blocks on node A commitment transaction
@@ -543,7 +622,9 @@ fn do_test_to_remote_after_local_detection(style: ConnectStyle) {
 fn test_to_remote_after_local_detection() {
 	do_test_to_remote_after_local_detection(ConnectStyle::BestBlockFirst);
 	do_test_to_remote_after_local_detection(ConnectStyle::BestBlockFirstSkippingBlocks);
+	do_test_to_remote_after_local_detection(ConnectStyle::BestBlockFirstReorgsOnlyTip);
 	do_test_to_remote_after_local_detection(ConnectStyle::TransactionsFirst);
 	do_test_to_remote_after_local_detection(ConnectStyle::TransactionsFirstSkippingBlocks);
+	do_test_to_remote_after_local_detection(ConnectStyle::TransactionsFirstReorgsOnlyTip);
 	do_test_to_remote_after_local_detection(ConnectStyle::FullBlockViaListen);
 }

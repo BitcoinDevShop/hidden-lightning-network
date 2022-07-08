@@ -11,7 +11,7 @@
 #![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
 
 //! This crate provides data structures to represent
-//! [lightning BOLT11](https://github.com/lightningnetwork/lightning-rfc/blob/master/11-payment-encoding.md)
+//! [lightning BOLT11](https://github.com/lightning/bolts/blob/master/11-payment-encoding.md)
 //! invoices and functions to create, encode and decode these. If you just want to use the standard
 //! en-/decoding functionality this should get you started:
 //!
@@ -25,6 +25,8 @@ compile_error!("at least one of the `std` or `no-std` features must be enabled")
 pub mod payment;
 pub mod utils;
 
+pub(crate) mod time_utils;
+
 extern crate bech32;
 extern crate bitcoin_hashes;
 #[macro_use] extern crate lightning;
@@ -33,6 +35,8 @@ extern crate secp256k1;
 extern crate alloc;
 #[cfg(any(test, feature = "std"))]
 extern crate core;
+#[cfg(feature = "serde")]
+extern crate serde;
 
 #[cfg(feature = "std")]
 use std::time::SystemTime;
@@ -43,19 +47,24 @@ use bitcoin_hashes::sha256;
 use lightning::ln::PaymentSecret;
 use lightning::ln::features::InvoiceFeatures;
 #[cfg(any(doc, test))]
-use lightning::routing::network_graph::RoutingFees;
+use lightning::routing::gossip::RoutingFees;
 use lightning::routing::router::RouteHint;
 use lightning::util::invoice::construct_invoice_preimage;
 
-use secp256k1::key::PublicKey;
+use secp256k1::PublicKey;
 use secp256k1::{Message, Secp256k1};
-use secp256k1::recovery::RecoverableSignature;
+use secp256k1::ecdsa::RecoverableSignature;
 
 use core::fmt::{Display, Formatter, self};
 use core::iter::FilterMap;
+use core::num::ParseIntError;
 use core::ops::Deref;
 use core::slice::Iter;
 use core::time::Duration;
+use core::str;
+
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer,Serialize, Serializer, de::Error};
 
 mod de;
 mod ser;
@@ -86,7 +95,45 @@ mod sync {
 #[cfg(not(feature = "std"))]
 mod sync;
 
-pub use de::{ParseError, ParseOrSemanticError};
+/// Errors that indicate what is wrong with the invoice. They have some granularity for debug
+/// reasons, but should generally result in an "invalid BOLT11 invoice" message for the user.
+#[allow(missing_docs)]
+#[derive(PartialEq, Debug, Clone)]
+pub enum ParseError {
+	Bech32Error(bech32::Error),
+	ParseAmountError(ParseIntError),
+	MalformedSignature(secp256k1::Error),
+	BadPrefix,
+	UnknownCurrency,
+	UnknownSiPrefix,
+	MalformedHRP,
+	TooShortDataPart,
+	UnexpectedEndOfTaggedFields,
+	DescriptionDecodeError(str::Utf8Error),
+	PaddingError,
+	IntegerOverflowError,
+	InvalidSegWitProgramLength,
+	InvalidPubKeyHashLength,
+	InvalidScriptHashLength,
+	InvalidRecoveryId,
+	InvalidSliceLength(String),
+
+	/// Not an error, but used internally to signal that a part of the invoice should be ignored
+	/// according to BOLT11
+	Skip,
+}
+
+/// Indicates that something went wrong while parsing or validating the invoice. Parsing errors
+/// should be mostly seen as opaque and are only there for debugging reasons. Semantic errors
+/// like wrong signatures, missing fields etc. could mean that someone tampered with the invoice.
+#[derive(PartialEq, Debug, Clone)]
+pub enum ParseOrSemanticError {
+	/// The invoice couldn't be decoded
+	ParseError(ParseError),
+
+	/// The invoice could be decoded but violates the BOLT11 standard
+	SemanticError(::SemanticError),
+}
 
 /// The number of bits used to represent timestamps as defined in BOLT 11.
 const TIMESTAMP_BITS: usize = 35;
@@ -123,7 +170,7 @@ pub const DEFAULT_MIN_FINAL_CLTV_EXPIRY: u64 = 18;
 /// use bitcoin_hashes::sha256;
 ///
 /// use secp256k1::Secp256k1;
-/// use secp256k1::key::SecretKey;
+/// use secp256k1::SecretKey;
 ///
 /// use lightning::ln::PaymentSecret;
 ///
@@ -151,7 +198,7 @@ pub const DEFAULT_MIN_FINAL_CLTV_EXPIRY: u64 = 18;
 /// 	.current_timestamp()
 /// 	.min_final_cltv_expiry(144)
 /// 	.build_signed(|hash| {
-/// 		Secp256k1::new().sign_recoverable(hash, &private_key)
+/// 		Secp256k1::new().sign_ecdsa_recoverable(hash, &private_key)
 /// 	})
 /// 	.unwrap();
 ///
@@ -612,9 +659,9 @@ impl<D: tb::Bool, H: tb::Bool, T: tb::Bool, S: tb::Bool> InvoiceBuilder<D, H, T,
 impl<D: tb::Bool, H: tb::Bool, T: tb::Bool, C: tb::Bool> InvoiceBuilder<D, H, T, C, tb::False> {
 	/// Sets the payment secret and relevant features.
 	pub fn payment_secret(mut self, payment_secret: PaymentSecret) -> InvoiceBuilder<D, H, T, C, tb::True> {
-		let features = InvoiceFeatures::empty()
-			.set_variable_length_onion_required()
-			.set_payment_secret_required();
+		let mut features = InvoiceFeatures::empty();
+		features.set_variable_length_onion_required();
+		features.set_payment_secret_required();
 		self.tagged_fields.push(TaggedField::PaymentSecret(payment_secret));
 		self.tagged_fields.push(TaggedField::Features(features));
 		self.set_flags()
@@ -624,13 +671,11 @@ impl<D: tb::Bool, H: tb::Bool, T: tb::Bool, C: tb::Bool> InvoiceBuilder<D, H, T,
 impl<D: tb::Bool, H: tb::Bool, T: tb::Bool, C: tb::Bool> InvoiceBuilder<D, H, T, C, tb::True> {
 	/// Sets the `basic_mpp` feature as optional.
 	pub fn basic_mpp(mut self) -> Self {
-		self.tagged_fields = self.tagged_fields
-			.drain(..)
-			.map(|field| match field {
-				TaggedField::Features(f) => TaggedField::Features(f.set_basic_mpp_optional()),
-				_ => field,
-			})
-			.collect();
+		for field in self.tagged_fields.iter_mut() {
+			if let TaggedField::Features(f) = field {
+				f.set_basic_mpp_optional();
+			}
+		}
 		self
 	}
 }
@@ -711,7 +756,7 @@ impl SignedRawInvoice {
 		let hash = Message::from_slice(&self.hash[..])
 			.expect("Hash is 32 bytes long, same as MESSAGE_SIZE");
 
-		Ok(PayeePubKey(Secp256k1::new().recover(
+		Ok(PayeePubKey(Secp256k1::new().recover_ecdsa(
 			&hash,
 			&self.signature
 		)?))
@@ -738,7 +783,7 @@ impl SignedRawInvoice {
 			.expect("Hash is 32 bytes long, same as MESSAGE_SIZE");
 
 		let secp_context = Secp256k1::new();
-		let verification_result = secp_context.verify(
+		let verification_result = secp_context.verify_ecdsa(
 			&hash,
 			&self.signature.to_standard(),
 			pub_key
@@ -755,18 +800,15 @@ impl SignedRawInvoice {
 /// variant. If no element was found `None` gets returned.
 ///
 /// The following example would extract the first B.
-/// ```
-/// use Enum::*
 ///
 /// enum Enum {
 /// 	A(u8),
 /// 	B(u16)
 /// }
 ///
-/// let elements = vec![A(1), A(2), B(3), A(4)]
+/// let elements = vec![Enum::A(1), Enum::A(2), Enum::B(3), Enum::A(4)];
 ///
-/// assert_eq!(find_extract!(elements.iter(), Enum::B(ref x), x), Some(3u16))
-/// ```
+/// assert_eq!(find_extract!(elements.iter(), Enum::B(x), x), Some(3u16));
 macro_rules! find_extract {
 	($iter:expr, $enm:pat, $enm_var:ident) => {
 		find_all_extract!($iter, $enm, $enm_var).next()
@@ -777,20 +819,18 @@ macro_rules! find_extract {
 /// variant through an iterator.
 ///
 /// The following example would extract all A.
-/// ```
-/// use Enum::*
 ///
 /// enum Enum {
 /// 	A(u8),
 /// 	B(u16)
 /// }
 ///
-/// let elements = vec![A(1), A(2), B(3), A(4)]
+/// let elements = vec![Enum::A(1), Enum::A(2), Enum::B(3), Enum::A(4)];
 ///
 /// assert_eq!(
-/// 	find_all_extract!(elements.iter(), Enum::A(ref x), x).collect::<Vec<u8>>(),
-/// 	vec![1u8, 2u8, 4u8])
-/// ```
+/// 	find_all_extract!(elements.iter(), Enum::A(x), x).collect::<Vec<u8>>(),
+/// 	vec![1u8, 2u8, 4u8]
+/// );
 macro_rules! find_all_extract {
 	($iter:expr, $enm:pat, $enm_var:ident) => {
 		$iter.filter_map(|tf| match *tf {
@@ -1488,6 +1528,23 @@ impl<S> Display for SignOrCreationError<S> {
 	}
 }
 
+#[cfg(feature = "serde")]
+impl Serialize for Invoice {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+		serializer.serialize_str(self.to_string().as_str())
+	}
+}
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for Invoice {
+	fn deserialize<D>(deserializer: D) -> Result<Invoice, D::Error> where D: Deserializer<'de> {
+		let bolt11 = String::deserialize(deserializer)?
+			.parse::<Invoice>()
+			.map_err(|e| D::Error::custom(format!("{:?}", e)))?;
+
+		Ok(bolt11)
+	}
+}
+
 #[cfg(test)]
 mod test {
 	use bitcoin_hashes::hex::FromHex;
@@ -1538,8 +1595,8 @@ mod test {
 	fn test_check_signature() {
 		use TaggedField::*;
 		use secp256k1::Secp256k1;
-		use secp256k1::recovery::{RecoveryId, RecoverableSignature};
-		use secp256k1::key::{SecretKey, PublicKey};
+		use secp256k1::ecdsa::{RecoveryId, RecoverableSignature};
+		use secp256k1::{SecretKey, PublicKey};
 		use {SignedRawInvoice, InvoiceSignature, RawInvoice, RawHrp, RawDataPart, Currency, Sha256,
 			 PositiveTimestamp};
 
@@ -1597,7 +1654,7 @@ mod test {
 
 		let (raw_invoice, _, _) = invoice.into_parts();
 		let new_signed = raw_invoice.sign::<_, ()>(|hash| {
-			Ok(Secp256k1::new().sign_recoverable(hash, &private_key))
+			Ok(Secp256k1::new().sign_ecdsa_recoverable(hash, &private_key))
 		}).unwrap();
 
 		assert!(new_signed.check_signature());
@@ -1608,7 +1665,7 @@ mod test {
 		use TaggedField::*;
 		use lightning::ln::features::InvoiceFeatures;
 		use secp256k1::Secp256k1;
-		use secp256k1::key::SecretKey;
+		use secp256k1::SecretKey;
 		use {RawInvoice, RawHrp, RawDataPart, Currency, Sha256, PositiveTimestamp, Invoice,
 			 SemanticError};
 
@@ -1639,7 +1696,7 @@ mod test {
 		let invoice = {
 			let mut invoice = invoice_template.clone();
 			invoice.data.tagged_fields.push(PaymentSecret(payment_secret).into());
-			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_recoverable(hash, &private_key)))
+			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_ecdsa_recoverable(hash, &private_key)))
 		}.unwrap();
 		assert_eq!(Invoice::from_signed(invoice), Err(SemanticError::InvalidFeatures));
 
@@ -1648,7 +1705,7 @@ mod test {
 			let mut invoice = invoice_template.clone();
 			invoice.data.tagged_fields.push(PaymentSecret(payment_secret).into());
 			invoice.data.tagged_fields.push(Features(InvoiceFeatures::empty()).into());
-			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_recoverable(hash, &private_key)))
+			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_ecdsa_recoverable(hash, &private_key)))
 		}.unwrap();
 		assert_eq!(Invoice::from_signed(invoice), Err(SemanticError::InvalidFeatures));
 
@@ -1657,14 +1714,14 @@ mod test {
 			let mut invoice = invoice_template.clone();
 			invoice.data.tagged_fields.push(PaymentSecret(payment_secret).into());
 			invoice.data.tagged_fields.push(Features(InvoiceFeatures::known()).into());
-			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_recoverable(hash, &private_key)))
+			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_ecdsa_recoverable(hash, &private_key)))
 		}.unwrap();
 		assert!(Invoice::from_signed(invoice).is_ok());
 
 		// No payment secret or features
 		let invoice = {
 			let invoice = invoice_template.clone();
-			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_recoverable(hash, &private_key)))
+			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_ecdsa_recoverable(hash, &private_key)))
 		}.unwrap();
 		assert_eq!(Invoice::from_signed(invoice), Err(SemanticError::NoPaymentSecret));
 
@@ -1672,7 +1729,7 @@ mod test {
 		let invoice = {
 			let mut invoice = invoice_template.clone();
 			invoice.data.tagged_fields.push(Features(InvoiceFeatures::empty()).into());
-			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_recoverable(hash, &private_key)))
+			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_ecdsa_recoverable(hash, &private_key)))
 		}.unwrap();
 		assert_eq!(Invoice::from_signed(invoice), Err(SemanticError::NoPaymentSecret));
 
@@ -1680,7 +1737,7 @@ mod test {
 		let invoice = {
 			let mut invoice = invoice_template.clone();
 			invoice.data.tagged_fields.push(Features(InvoiceFeatures::known()).into());
-			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_recoverable(hash, &private_key)))
+			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_ecdsa_recoverable(hash, &private_key)))
 		}.unwrap();
 		assert_eq!(Invoice::from_signed(invoice), Err(SemanticError::NoPaymentSecret));
 
@@ -1689,7 +1746,7 @@ mod test {
 			let mut invoice = invoice_template.clone();
 			invoice.data.tagged_fields.push(PaymentSecret(payment_secret).into());
 			invoice.data.tagged_fields.push(PaymentSecret(payment_secret).into());
-			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_recoverable(hash, &private_key)))
+			invoice.sign::<_, ()>(|hash| Ok(Secp256k1::new().sign_ecdsa_recoverable(hash, &private_key)))
 		}.unwrap();
 		assert_eq!(Invoice::from_signed(invoice), Err(SemanticError::MultiplePaymentSecrets));
 	}
@@ -1726,7 +1783,7 @@ mod test {
 		use ::*;
 		use lightning::routing::router::RouteHintHop;
 		use std::iter::FromIterator;
-		use secp256k1::key::PublicKey;
+		use secp256k1::PublicKey;
 
 		let builder = InvoiceBuilder::new(Currency::Bitcoin)
 			.payment_hash(sha256::Hash::from_slice(&[0;32][..]).unwrap())
@@ -1780,7 +1837,7 @@ mod test {
 		use ::*;
 		use lightning::routing::router::RouteHintHop;
 		use secp256k1::Secp256k1;
-		use secp256k1::key::{SecretKey, PublicKey};
+		use secp256k1::{SecretKey, PublicKey};
 		use std::time::{UNIX_EPOCH, Duration};
 
 		let secp_ctx = Secp256k1::new();
@@ -1859,7 +1916,7 @@ mod test {
 			.basic_mpp();
 
 		let invoice = builder.clone().build_signed(|hash| {
-			secp_ctx.sign_recoverable(hash, &private_key)
+			secp_ctx.sign_ecdsa_recoverable(hash, &private_key)
 		}).unwrap();
 
 		assert!(invoice.check_signature().is_ok());
@@ -1894,7 +1951,7 @@ mod test {
 	fn test_default_values() {
 		use ::*;
 		use secp256k1::Secp256k1;
-		use secp256k1::key::SecretKey;
+		use secp256k1::SecretKey;
 
 		let signed_invoice = InvoiceBuilder::new(Currency::Bitcoin)
 			.description("Test".into())
@@ -1906,7 +1963,7 @@ mod test {
 			.sign::<_, ()>(|hash| {
 				let privkey = SecretKey::from_slice(&[41; 32]).unwrap();
 				let secp_ctx = Secp256k1::new();
-				Ok(secp_ctx.sign_recoverable(hash, &privkey))
+				Ok(secp_ctx.sign_ecdsa_recoverable(hash, &privkey))
 			})
 			.unwrap();
 		let invoice = Invoice::from_signed(signed_invoice).unwrap();
@@ -1920,7 +1977,7 @@ mod test {
 	fn test_expiration() {
 		use ::*;
 		use secp256k1::Secp256k1;
-		use secp256k1::key::SecretKey;
+		use secp256k1::SecretKey;
 
 		let signed_invoice = InvoiceBuilder::new(Currency::Bitcoin)
 			.description("Test".into())
@@ -1932,11 +1989,33 @@ mod test {
 			.sign::<_, ()>(|hash| {
 				let privkey = SecretKey::from_slice(&[41; 32]).unwrap();
 				let secp_ctx = Secp256k1::new();
-				Ok(secp_ctx.sign_recoverable(hash, &privkey))
+				Ok(secp_ctx.sign_ecdsa_recoverable(hash, &privkey))
 			})
 			.unwrap();
 		let invoice = Invoice::from_signed(signed_invoice).unwrap();
 
 		assert!(invoice.would_expire(Duration::from_secs(1234567 + DEFAULT_EXPIRY_TIME + 1)));
+	}
+
+	#[cfg(feature = "serde")]
+	#[test]
+	fn test_serde() {
+		let invoice_str = "lnbc100p1psj9jhxdqud3jxktt5w46x7unfv9kz6mn0v3jsnp4q0d3p2sfluzdx45tqcs\
+			h2pu5qc7lgq0xs578ngs6s0s68ua4h7cvspp5q6rmq35js88zp5dvwrv9m459tnk2zunwj5jalqtyxqulh0l\
+			5gflssp5nf55ny5gcrfl30xuhzj3nphgj27rstekmr9fw3ny5989s300gyus9qyysgqcqpcrzjqw2sxwe993\
+			h5pcm4dxzpvttgza8zhkqxpgffcrf5v25nwpr3cmfg7z54kuqq8rgqqqqqqqq2qqqqq9qq9qrzjqd0ylaqcl\
+			j9424x9m8h2vcukcgnm6s56xfgu3j78zyqzhgs4hlpzvznlugqq9vsqqqqqqqlgqqqqqeqq9qrzjqwldmj9d\
+			ha74df76zhx6l9we0vjdquygcdt3kssupehe64g6yyp5yz5rhuqqwccqqyqqqqlgqqqqjcqq9qrzjqf9e58a\
+			guqr0rcun0ajlvmzq3ek63cw2w282gv3z5uupmuwvgjtq2z55qsqqg6qqqyqqqrtnqqqzq3cqygrzjqvphms\
+			ywntrrhqjcraumvc4y6r8v4z5v593trte429v4hredj7ms5z52usqq9ngqqqqqqqlgqqqqqqgq9qrzjq2v0v\
+			p62g49p7569ev48cmulecsxe59lvaw3wlxm7r982zxa9zzj7z5l0cqqxusqqyqqqqlgqqqqqzsqygarl9fh3\
+			8s0gyuxjjgux34w75dnc6xp2l35j7es3jd4ugt3lu0xzre26yg5m7ke54n2d5sym4xcmxtl8238xxvw5h5h5\
+			j5r6drg6k6zcqj0fcwg";
+		let invoice = invoice_str.parse::<super::Invoice>().unwrap();
+		let serialized_invoice = serde_json::to_string(&invoice).unwrap();
+		let deserialized_invoice: super::Invoice = serde_json::from_str(serialized_invoice.as_str()).unwrap();
+		assert_eq!(invoice, deserialized_invoice);
+		assert_eq!(invoice_str, deserialized_invoice.to_string().as_str());
+		assert_eq!(invoice_str, serialized_invoice.as_str().trim_matches('\"'));
 	}
 }
