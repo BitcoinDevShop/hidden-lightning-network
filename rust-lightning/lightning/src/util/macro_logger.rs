@@ -12,7 +12,7 @@ use chain::transaction::OutPoint;
 
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::hash_types::Txid;
-use bitcoin::secp256k1::key::PublicKey;
+use bitcoin::secp256k1::PublicKey;
 
 use ln::chan_utils::HTLCType;
 use routing::router::Route;
@@ -226,7 +226,7 @@ macro_rules! log_error {
 	)
 }
 
-/// log a warning
+/// Log a warning.
 #[macro_export]
 macro_rules! log_warn {
 	($logger: expr, $($arg:tt)*) => (
@@ -234,7 +234,7 @@ macro_rules! log_warn {
 	)
 }
 
-/// Log a info log.
+/// Log some info.
 #[macro_export]
 macro_rules! log_info {
 	($logger: expr, $($arg:tt)*) => (
@@ -242,7 +242,7 @@ macro_rules! log_info {
 	)
 }
 
-/// Log a debug log.
+/// Log some debug.
 #[macro_export]
 macro_rules! log_debug {
 	($logger: expr, $($arg:tt)*) => (
@@ -259,6 +259,7 @@ macro_rules! log_trace {
 }
 
 /// Log a gossip log.
+#[macro_export]
 macro_rules! log_gossip {
 	($logger: expr, $($arg:tt)*) => (
 		log_given_level!($logger, $crate::util::logger::Level::Gossip, $($arg)*);

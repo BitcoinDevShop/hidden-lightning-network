@@ -10,7 +10,7 @@
 //! Wire encoding/decoding for Lightning messages according to [BOLT #1], and for
 //! custom message through the [`CustomMessageReader`] trait.
 //! 
-//! [BOLT #1]: https://github.com/lightningnetwork/lightning-rfc/blob/master/01-messaging.md
+//! [BOLT #1]: https://github.com/lightning/bolts/blob/master/01-messaging.md
 
 use io;
 use ln::msgs;
@@ -28,11 +28,26 @@ pub trait CustomMessageReader {
 	fn read<R: io::Read>(&self, message_type: u16, buffer: &mut R) -> Result<Option<Self::CustomMessage>, msgs::DecodeError>;
 }
 
+// TestEq is a dummy trait which requires PartialEq when built in testing, and otherwise is
+// blanket-implemented for all types.
+
+#[cfg(test)]
+pub trait TestEq : PartialEq {}
+#[cfg(test)]
+impl<T: PartialEq> TestEq for T {}
+
+#[cfg(not(test))]
+pub(crate) trait TestEq {}
+#[cfg(not(test))]
+impl<T> TestEq for T {}
+
+
 /// A Lightning message returned by [`read()`] when decoding bytes received over the wire. Each
 /// variant contains a message from [`msgs`] or otherwise the message type if unknown.
 #[allow(missing_docs)]
 #[derive(Debug)]
-pub(crate) enum Message<T> where T: core::fmt::Debug + Type {
+#[cfg_attr(test, derive(PartialEq))]
+pub(crate) enum Message<T> where T: core::fmt::Debug + Type + TestEq {
 	Init(msgs::Init),
 	Error(msgs::ErrorMessage),
 	Warning(msgs::WarningMessage),
@@ -42,7 +57,7 @@ pub(crate) enum Message<T> where T: core::fmt::Debug + Type {
 	AcceptChannel(msgs::AcceptChannel),
 	FundingCreated(msgs::FundingCreated),
 	FundingSigned(msgs::FundingSigned),
-	FundingLocked(msgs::FundingLocked),
+	ChannelReady(msgs::ChannelReady),
 	Shutdown(msgs::Shutdown),
 	ClosingSigned(msgs::ClosingSigned),
 	UpdateAddHTLC(msgs::UpdateAddHTLC),
@@ -69,7 +84,7 @@ pub(crate) enum Message<T> where T: core::fmt::Debug + Type {
 	Custom(T),
 }
 
-impl<T> Message<T> where T: core::fmt::Debug + Type {
+impl<T> Message<T> where T: core::fmt::Debug + Type + TestEq {
 	/// Returns the type that was used to decode the message payload.
 	pub fn type_id(&self) -> u16 {
 		match self {
@@ -82,7 +97,7 @@ impl<T> Message<T> where T: core::fmt::Debug + Type {
 			&Message::AcceptChannel(ref msg) => msg.type_id(),
 			&Message::FundingCreated(ref msg) => msg.type_id(),
 			&Message::FundingSigned(ref msg) => msg.type_id(),
-			&Message::FundingLocked(ref msg) => msg.type_id(),
+			&Message::ChannelReady(ref msg) => msg.type_id(),
 			&Message::Shutdown(ref msg) => msg.type_id(),
 			&Message::ClosingSigned(ref msg) => msg.type_id(),
 			&Message::UpdateAddHTLC(ref msg) => msg.type_id(),
@@ -161,8 +176,8 @@ fn do_read<R: io::Read, T, H: core::ops::Deref>(buffer: &mut R, message_type: u1
 		msgs::FundingSigned::TYPE => {
 			Ok(Message::FundingSigned(Readable::read(buffer)?))
 		},
-		msgs::FundingLocked::TYPE => {
-			Ok(Message::FundingLocked(Readable::read(buffer)?))
+		msgs::ChannelReady::TYPE => {
+			Ok(Message::ChannelReady(Readable::read(buffer)?))
 		},
 		msgs::Shutdown::TYPE => {
 			Ok(Message::Shutdown(Readable::read(buffer)?))
@@ -252,6 +267,7 @@ mod encode {
 
 pub(crate) use self::encode::Encode;
 
+#[cfg(not(test))]
 /// Defines a type identifier for sending messages over the wire.
 ///
 /// Messages implementing this trait specify a type and must be [`Writeable`].
@@ -260,10 +276,24 @@ pub trait Type: core::fmt::Debug + Writeable {
 	fn type_id(&self) -> u16;
 }
 
+#[cfg(test)]
+pub trait Type: core::fmt::Debug + Writeable + PartialEq {
+	fn type_id(&self) -> u16;
+}
+
+#[cfg(any(feature = "_test_utils", fuzzing, test))]
+impl Type for () {
+	fn type_id(&self) -> u16 { unreachable!(); }
+}
+
+#[cfg(test)]
+impl<T: core::fmt::Debug + Writeable + PartialEq> Type for T where T: Encode {
+	fn type_id(&self) -> u16 { T::TYPE }
+}
+
+#[cfg(not(test))]
 impl<T: core::fmt::Debug + Writeable> Type for T where T: Encode {
-	fn type_id(&self) -> u16 {
-		T::TYPE
-	}
+	fn type_id(&self) -> u16 { T::TYPE }
 }
 
 impl Encode for msgs::Init {
@@ -302,7 +332,7 @@ impl Encode for msgs::FundingSigned {
 	const TYPE: u16 = 35;
 }
 
-impl Encode for msgs::FundingLocked {
+impl Encode for msgs::ChannelReady {
 	const TYPE: u16 = 36;
 }
 
@@ -471,10 +501,6 @@ mod tests {
 		}
 	}
 
-	impl Type for () {
-		fn type_id(&self) -> u16 { unreachable!(); }
-	}
-
 	#[test]
 	fn is_even_message_type() {
 		let message = Message::<()>::Unknown(42);
@@ -505,7 +531,7 @@ mod tests {
 		let mut reader = io::Cursor::new(buffer);
 		let decoded_msg = read(&mut reader, &IgnoringMessageHandler{}).unwrap();
 		match decoded_msg {
-			Message::Init(msgs::Init { features }) => {
+			Message::Init(msgs::Init { features, .. }) => {
 				assert!(features.supports_variable_length_onion());
 				assert!(features.supports_upfront_shutdown_script());
 				assert!(features.supports_gossip_queries());

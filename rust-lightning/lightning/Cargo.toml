@@ -1,6 +1,6 @@
 [package]
 name = "lightning"
-version = "0.0.105"
+version = "0.0.109"
 authors = ["Matt Corallo"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/lightningdevkit/rust-lightning/"
@@ -32,27 +32,26 @@ _bench_unstable = []
 no-std = ["hashbrown", "bitcoin/no-std", "core2/alloc"]
 std = ["bitcoin/std"]
 
-default = ["std"]
+# Generates low-r bitcoin signatures, which saves 1 byte in 50% of the cases
+grind_signatures = []
+
+default = ["std", "grind_signatures"]
 
 [dependencies]
-bitcoin = { version = "0.27", default-features = false, features = ["secp-recovery"] }
-# TODO remove this once rust-bitcoin PR #637 is released
-secp256k1 = { version = "0.20.2", default-features = false, features = ["alloc"] }
+bitcoin = { version = "0.28.1", default-features = false, features = ["secp-recovery"] }
 
 hashbrown = { version = "0.11", optional = true }
 hex = { version = "0.4", optional = true }
-regex = { version = "0.1.80", optional = true }
+regex = { version = "1.5.6", optional = true }
 backtrace = { version = "0.3", optional = true }
 
 core2 = { version = "0.3.0", optional = true, default-features = false }
 
 [dev-dependencies]
 hex = "0.4"
-regex = "0.1.80"
-# TODO remove this once rust-bitcoin PR #637 is released
-secp256k1 = { version = "0.20.2", default-features = false, features = ["alloc"] }
+regex = "1.5.6"
 
 [dev-dependencies.bitcoin]
-version = "0.27"
+version = "0.28.1"
 default-features = false
 features = ["bitcoinconsensus", "secp-recovery"]

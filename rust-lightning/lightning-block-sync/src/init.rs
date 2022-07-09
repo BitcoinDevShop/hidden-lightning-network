@@ -4,11 +4,13 @@
 use crate::{BlockSource, BlockSourceResult, Cache, ChainNotifier};
 use crate::poll::{ChainPoller, Validate, ValidatedBlockHeader};
 
-use bitcoin::blockdata::block::{Block, BlockHeader};
+use bitcoin::blockdata::block::BlockHeader;
 use bitcoin::hash_types::BlockHash;
 use bitcoin::network::constants::Network;
 
 use lightning::chain;
+
+use std::ops::Deref;
 
 /// Returns a validated block header of the source's best chain tip.
 ///
@@ -16,8 +18,8 @@ use lightning::chain;
 /// start when there are no chain listeners to sync yet.
 ///
 /// [`SpvClient`]: crate::SpvClient
-pub async fn validate_best_block_header<B: BlockSource>(block_source: &mut B) ->
-BlockSourceResult<ValidatedBlockHeader> {
+pub async fn validate_best_block_header<B: Deref>(block_source: B) ->
+BlockSourceResult<ValidatedBlockHeader> where B::Target: BlockSource {
 	let (best_block_hash, best_block_height) = block_source.get_best_block().await?;
 	block_source
 		.get_header(&best_block_hash, best_block_height).await?
@@ -67,7 +69,7 @@ BlockSourceResult<ValidatedBlockHeader> {
 /// 	C: chain::Filter,
 /// 	P: chainmonitor::Persist<S>,
 /// >(
-/// 	block_source: &mut B,
+/// 	block_source: &B,
 /// 	chain_monitor: &ChainMonitor<S, &C, &T, &F, &L, &P>,
 /// 	config: UserConfig,
 /// 	keys_manager: &K,
@@ -121,13 +123,13 @@ BlockSourceResult<ValidatedBlockHeader> {
 /// [`SpvClient`]: crate::SpvClient
 /// [`ChannelManager`]: lightning::ln::channelmanager::ChannelManager
 /// [`ChannelMonitor`]: lightning::chain::channelmonitor::ChannelMonitor
-pub async fn synchronize_listeners<B: BlockSource, C: Cache>(
-	block_source: &mut B,
+pub async fn synchronize_listeners<B: Deref + Sized + Send + Sync, C: Cache, L: chain::Listen + ?Sized>(
+	block_source: B,
 	network: Network,
 	header_cache: &mut C,
-	mut chain_listeners: Vec<(BlockHash, &dyn chain::Listen)>,
-) -> BlockSourceResult<ValidatedBlockHeader> {
-	let best_header = validate_best_block_header(block_source).await?;
+	mut chain_listeners: Vec<(BlockHash, &L)>,
+) -> BlockSourceResult<ValidatedBlockHeader> where B::Target: BlockSource {
+	let best_header = validate_best_block_header(&*block_source).await?;
 
 	// Fetch the header for the block hash paired with each listener.
 	let mut chain_listeners_with_old_headers = Vec::new();
@@ -198,10 +200,10 @@ impl<'a, C: Cache> Cache for ReadOnlyCache<'a, C> {
 }
 
 /// Wrapper for supporting dynamically sized chain listeners.
-struct DynamicChainListener<'a>(&'a dyn chain::Listen);
+struct DynamicChainListener<'a, L: chain::Listen + ?Sized>(&'a L);
 
-impl<'a> chain::Listen for DynamicChainListener<'a> {
-	fn block_connected(&self, _block: &Block, _height: u32) {
+impl<'a, L: chain::Listen + ?Sized> chain::Listen for DynamicChainListener<'a, L> {
+	fn filtered_block_connected(&self, _header: &BlockHeader, _txdata: &chain::transaction::TransactionData, _height: u32) {
 		unreachable!()
 	}
 
@@ -211,13 +213,13 @@ impl<'a> chain::Listen for DynamicChainListener<'a> {
 }
 
 /// A set of dynamically sized chain listeners, each paired with a starting block height.
-struct ChainListenerSet<'a>(Vec<(u32, &'a dyn chain::Listen)>);
+struct ChainListenerSet<'a, L: chain::Listen + ?Sized>(Vec<(u32, &'a L)>);
 
-impl<'a> chain::Listen for ChainListenerSet<'a> {
-	fn block_connected(&self, block: &Block, height: u32) {
+impl<'a, L: chain::Listen + ?Sized> chain::Listen for ChainListenerSet<'a, L> {
+	fn filtered_block_connected(&self, header: &BlockHeader, txdata: &chain::transaction::TransactionData, height: u32) {
 		for (starting_height, chain_listener) in self.0.iter() {
 			if height > *starting_height {
-				chain_listener.block_connected(block, height);
+				chain_listener.filtered_block_connected(header, txdata, height);
 			}
 		}
 	}
@@ -236,7 +238,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn sync_from_same_chain() {
-		let mut chain = Blockchain::default().with_height(4);
+		let chain = Blockchain::default().with_height(4);
 
 		let listener_1 = MockChainListener::new()
 			.expect_block_connected(*chain.at_height(2))
@@ -254,7 +256,7 @@ mod tests {
 			(chain.at_height(3).block_hash, &listener_3 as &dyn chain::Listen),
 		];
 		let mut cache = chain.header_cache(0..=4);
-		match synchronize_listeners(&mut chain, Network::Bitcoin, &mut cache, listeners).await {
+		match synchronize_listeners(&chain, Network::Bitcoin, &mut cache, listeners).await {
 			Ok(header) => assert_eq!(header, chain.tip()),
 			Err(e) => panic!("Unexpected error: {:?}", e),
 		}
@@ -262,7 +264,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn sync_from_different_chains() {
-		let mut main_chain = Blockchain::default().with_height(4);
+		let main_chain = Blockchain::default().with_height(4);
 		let fork_chain_1 = main_chain.fork_at_height(1);
 		let fork_chain_2 = main_chain.fork_at_height(2);
 		let fork_chain_3 = main_chain.fork_at_height(3);
@@ -291,7 +293,7 @@ mod tests {
 		let mut cache = fork_chain_1.header_cache(2..=4);
 		cache.extend(fork_chain_2.header_cache(3..=4));
 		cache.extend(fork_chain_3.header_cache(4..=4));
-		match synchronize_listeners(&mut main_chain, Network::Bitcoin, &mut cache, listeners).await {
+		match synchronize_listeners(&main_chain, Network::Bitcoin, &mut cache, listeners).await {
 			Ok(header) => assert_eq!(header, main_chain.tip()),
 			Err(e) => panic!("Unexpected error: {:?}", e),
 		}
@@ -299,7 +301,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn sync_from_overlapping_chains() {
-		let mut main_chain = Blockchain::default().with_height(4);
+		let main_chain = Blockchain::default().with_height(4);
 		let fork_chain_1 = main_chain.fork_at_height(1);
 		let fork_chain_2 = fork_chain_1.fork_at_height(2);
 		let fork_chain_3 = fork_chain_2.fork_at_height(3);
@@ -334,7 +336,7 @@ mod tests {
 		let mut cache = fork_chain_1.header_cache(2..=4);
 		cache.extend(fork_chain_2.header_cache(3..=4));
 		cache.extend(fork_chain_3.header_cache(4..=4));
-		match synchronize_listeners(&mut main_chain, Network::Bitcoin, &mut cache, listeners).await {
+		match synchronize_listeners(&main_chain, Network::Bitcoin, &mut cache, listeners).await {
 			Ok(header) => assert_eq!(header, main_chain.tip()),
 			Err(e) => panic!("Unexpected error: {:?}", e),
 		}
@@ -342,7 +344,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn cache_connected_and_keep_disconnected_blocks() {
-		let mut main_chain = Blockchain::default().with_height(2);
+		let main_chain = Blockchain::default().with_height(2);
 		let fork_chain = main_chain.fork_at_height(1);
 		let new_tip = main_chain.tip();
 		let old_tip = fork_chain.tip();
@@ -353,7 +355,7 @@ mod tests {
 
 		let listeners = vec![(old_tip.block_hash, &listener as &dyn chain::Listen)];
 		let mut cache = fork_chain.header_cache(2..=2);
-		match synchronize_listeners(&mut main_chain, Network::Bitcoin, &mut cache, listeners).await {
+		match synchronize_listeners(&main_chain, Network::Bitcoin, &mut cache, listeners).await {
 			Ok(_) => {
 				assert!(cache.contains_key(&new_tip.block_hash));
 				assert!(cache.contains_key(&old_tip.block_hash));

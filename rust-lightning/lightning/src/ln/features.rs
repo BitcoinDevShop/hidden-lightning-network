@@ -19,7 +19,36 @@
 //! supports a feature if it advertises the feature (as either required or optional) to its peers.
 //! And the implementation can interpret a feature if the feature is known to it.
 //!
-//! [BOLT #9]: https://github.com/lightningnetwork/lightning-rfc/blob/master/09-features.md
+//! The following features are currently required in the LDK:
+//! - `VariableLengthOnion` - requires/supports variable-length routing onion payloads
+//!     (see [BOLT-4](https://github.com/lightning/bolts/blob/master/04-onion-routing.md) for more information).
+//! - `StaticRemoteKey` - requires/supports static key for remote output
+//!     (see [BOLT-3](https://github.com/lightning/bolts/blob/master/03-transactions.md) for more information).
+//!
+//! The following features are currently supported in the LDK:
+//! - `DataLossProtect` - requires/supports that a node which has somehow fallen behind, e.g., has been restored from an old backup,
+//!     can detect that it has fallen behind
+//!     (see [BOLT-2](https://github.com/lightning/bolts/blob/master/02-peer-protocol.md) for more information).
+//! - `InitialRoutingSync` - requires/supports that the sending node needs a complete routing information dump
+//!     (see [BOLT-7](https://github.com/lightning/bolts/blob/master/07-routing-gossip.md#initial-sync) for more information).
+//! - `UpfrontShutdownScript` - commits to a shutdown scriptpubkey when opening a channel
+//!     (see [BOLT-2](https://github.com/lightning/bolts/blob/master/02-peer-protocol.md#the-open_channel-message) for more information).
+//! - `GossipQueries` - requires/supports more sophisticated gossip control
+//!     (see [BOLT-7](https://github.com/lightning/bolts/blob/master/07-routing-gossip.md) for more information).
+//! - `PaymentSecret` - requires/supports that a node supports payment_secret field
+//!     (see [BOLT-4](https://github.com/lightning/bolts/blob/master/04-onion-routing.md) for more information).
+//! - `BasicMPP` - requires/supports that a node can receive basic multi-part payments
+//!     (see [BOLT-4](https://github.com/lightning/bolts/blob/master/04-onion-routing.md#basic-multi-part-payments) for more information).
+//! - `ShutdownAnySegwit` - requires/supports that future segwit versions are allowed in `shutdown`
+//!     (see [BOLT-2](https://github.com/lightning/bolts/blob/master/02-peer-protocol.md) for more information).
+//! - `ChannelType` - node supports the channel_type field in open/accept
+//!     (see [BOLT-2](https://github.com/lightning/bolts/blob/master/02-peer-protocol.md) for more information).
+//! - `SCIDPrivacy` - supply channel aliases for routing
+//!     (see [BOLT-2](https://github.com/lightning/bolts/blob/master/02-peer-protocol.md) for more information).
+//! - `Keysend` - send funds to a node without an invoice
+//!     (see the [`Keysend` feature assignment proposal](https://github.com/lightning/bolts/issues/605#issuecomment-606679798) for more information).
+//!
+//! [BOLT #9]: https://github.com/lightning/bolts/blob/master/09-features.md
 //! [messages]: crate::ln::msgs
 
 use {io, io_extras};
@@ -130,6 +159,8 @@ mod sealed {
 			,
 			// Byte 5
 			,
+			// Byte 6
+			,
 		],
 		optional_features: [
 			// Byte 0
@@ -137,13 +168,15 @@ mod sealed {
 			// Byte 1
 			,
 			// Byte 2
-			BasicMPP,
+			BasicMPP | Wumbo,
 			// Byte 3
 			ShutdownAnySegwit,
 			// Byte 4
 			,
 			// Byte 5
-			ChannelType,
+			ChannelType | SCIDPrivacy,
+			// Byte 6
+			ZeroConf,
 		],
 	});
 	define_context!(NodeContext {
@@ -169,15 +202,15 @@ mod sealed {
 			// Byte 1
 			,
 			// Byte 2
-			BasicMPP,
+			BasicMPP | Wumbo,
 			// Byte 3
 			ShutdownAnySegwit,
 			// Byte 4
 			,
 			// Byte 5
-			ChannelType,
+			ChannelType | SCIDPrivacy,
 			// Byte 6
-			Keysend,
+			ZeroConf | Keysend,
 		],
 	});
 	define_context!(ChannelContext {
@@ -214,6 +247,12 @@ mod sealed {
 			,
 			// Byte 3
 			,
+			// Byte 4
+			,
+			// Byte 5
+			SCIDPrivacy,
+			// Byte 6
+			ZeroConf,
 		],
 		optional_features: [
 			// Byte 0
@@ -223,6 +262,12 @@ mod sealed {
 			// Byte 2
 			,
 			// Byte 3
+			,
+			// Byte 4
+			,
+			// Byte 5
+			,
+			// Byte 6
 			,
 		],
 	});
@@ -236,7 +281,7 @@ mod sealed {
 			///
 			/// See [BOLT #9] for details.
 			///
-			/// [BOLT #9]: https://github.com/lightningnetwork/lightning-rfc/blob/master/09-features.md
+			/// [BOLT #9]: https://github.com/lightning/bolts/blob/master/09-features.md
 			pub trait $feature: Context {
 				/// The bit used to signify that the feature is required.
 				const EVEN_BIT: usize = $odd_bit - 1;
@@ -318,15 +363,13 @@ mod sealed {
 
 			impl <T: $feature> Features<T> {
 				/// Set this feature as optional.
-				pub fn $optional_setter(mut self) -> Self {
+				pub fn $optional_setter(&mut self) {
 					<T as $feature>::set_optional_bit(&mut self.flags);
-					self
 				}
 
 				/// Set this feature as required.
-				pub fn $required_setter(mut self) -> Self {
+				pub fn $required_setter(&mut self) {
 					<T as $feature>::set_required_bit(&mut self.flags);
-					self
 				}
 
 				/// Checks if this feature is supported.
@@ -384,12 +427,21 @@ mod sealed {
 	define_feature!(17, BasicMPP, [InitContext, NodeContext, InvoiceContext],
 		"Feature flags for `basic_mpp`.", set_basic_mpp_optional, set_basic_mpp_required,
 		supports_basic_mpp, requires_basic_mpp);
+	define_feature!(19, Wumbo, [InitContext, NodeContext],
+		"Feature flags for `option_support_large_channel` (aka wumbo channels).", set_wumbo_optional, set_wumbo_required,
+		supports_wumbo, requires_wumbo);
 	define_feature!(27, ShutdownAnySegwit, [InitContext, NodeContext],
 		"Feature flags for `opt_shutdown_anysegwit`.", set_shutdown_any_segwit_optional,
 		set_shutdown_any_segwit_required, supports_shutdown_anysegwit, requires_shutdown_anysegwit);
 	define_feature!(45, ChannelType, [InitContext, NodeContext],
 		"Feature flags for `option_channel_type`.", set_channel_type_optional,
 		set_channel_type_required, supports_channel_type, requires_channel_type);
+	define_feature!(47, SCIDPrivacy, [InitContext, NodeContext, ChannelTypeContext],
+		"Feature flags for only forwarding with SCID aliasing. Called `option_scid_alias` in the BOLTs",
+		set_scid_privacy_optional, set_scid_privacy_required, supports_scid_privacy, requires_scid_privacy);
+	define_feature!(51, ZeroConf, [InitContext, NodeContext, ChannelTypeContext],
+		"Feature flags for accepting channels with zero confirmations. Called `option_zeroconf` in the BOLTs",
+		set_zero_conf_optional, set_zero_conf_required, supports_zero_conf, requires_zero_conf);
 	define_feature!(55, Keysend, [NodeContext],
 		"Feature flags for keysend payments.", set_keysend_optional, set_keysend_required,
 		supports_keysend, requires_keysend);
@@ -506,7 +558,9 @@ impl InvoiceFeatures {
 	/// [`PaymentParameters::for_keysend`]: crate::routing::router::PaymentParameters::for_keysend
 	/// [`find_route`]: crate::routing::router::find_route
 	pub(crate) fn for_keysend() -> InvoiceFeatures {
-		InvoiceFeatures::empty().set_variable_length_onion_optional()
+		let mut res = InvoiceFeatures::empty();
+		res.set_variable_length_onion_optional();
+		res
 	}
 }
 
@@ -728,6 +782,15 @@ impl<T: sealed::ShutdownAnySegwit> Features<T> {
 		self
 	}
 }
+
+impl<T: sealed::Wumbo> Features<T> {
+	#[cfg(test)]
+	pub(crate) fn clear_wumbo(mut self) -> Self {
+		<T as sealed::Wumbo>::clear_bits(&mut self.flags);
+		self
+	}
+}
+
 macro_rules! impl_feature_len_prefixed_write {
 	($features: ident) => {
 		impl Writeable for $features {
@@ -826,6 +889,25 @@ mod tests {
 		assert!(InitFeatures::known().supports_shutdown_anysegwit());
 		assert!(NodeFeatures::known().supports_shutdown_anysegwit());
 
+		assert!(InitFeatures::known().supports_scid_privacy());
+		assert!(NodeFeatures::known().supports_scid_privacy());
+		assert!(ChannelTypeFeatures::known().supports_scid_privacy());
+		assert!(!InitFeatures::known().requires_scid_privacy());
+		assert!(!NodeFeatures::known().requires_scid_privacy());
+		assert!(ChannelTypeFeatures::known().requires_scid_privacy());
+
+		assert!(InitFeatures::known().supports_wumbo());
+		assert!(NodeFeatures::known().supports_wumbo());
+		assert!(!InitFeatures::known().requires_wumbo());
+		assert!(!NodeFeatures::known().requires_wumbo());
+
+		assert!(InitFeatures::known().supports_zero_conf());
+		assert!(!InitFeatures::known().requires_zero_conf());
+		assert!(NodeFeatures::known().supports_zero_conf());
+		assert!(!NodeFeatures::known().requires_zero_conf());
+		assert!(ChannelTypeFeatures::known().supports_zero_conf());
+		assert!(ChannelTypeFeatures::known().requires_zero_conf());
+
 		let mut init_features = InitFeatures::known();
 		assert!(init_features.initial_routing_sync());
 		init_features.clear_initial_routing_sync();
@@ -838,11 +920,13 @@ mod tests {
 		assert!(!features.requires_unknown_bits());
 		assert!(!features.supports_unknown_bits());
 
-		let features = ChannelFeatures::empty().set_unknown_feature_required();
+		let mut features = ChannelFeatures::empty();
+		features.set_unknown_feature_required();
 		assert!(features.requires_unknown_bits());
 		assert!(features.supports_unknown_bits());
 
-		let features = ChannelFeatures::empty().set_unknown_feature_optional();
+		let mut features = ChannelFeatures::empty();
+		features.set_unknown_feature_optional();
 		assert!(!features.requires_unknown_bits());
 		assert!(features.supports_unknown_bits());
 	}
@@ -859,17 +943,19 @@ mod tests {
 			// Check that the flags are as expected:
 			// - option_data_loss_protect
 			// - var_onion_optin (req) | static_remote_key (req) | payment_secret(req)
-			// - basic_mpp
+			// - basic_mpp | wumbo
 			// - opt_shutdown_anysegwit
 			// -
-			// - option_channel_type
-			assert_eq!(node_features.flags.len(), 6);
+			// - option_channel_type | option_scid_alias
+			// - option_zeroconf
+			assert_eq!(node_features.flags.len(), 7);
 			assert_eq!(node_features.flags[0], 0b00000010);
 			assert_eq!(node_features.flags[1], 0b01010001);
-			assert_eq!(node_features.flags[2], 0b00000010);
+			assert_eq!(node_features.flags[2], 0b00001010);
 			assert_eq!(node_features.flags[3], 0b00001000);
 			assert_eq!(node_features.flags[4], 0b00000000);
-			assert_eq!(node_features.flags[5], 0b00100000);
+			assert_eq!(node_features.flags[5], 0b10100000);
+			assert_eq!(node_features.flags[6], 0b00001000);
 		}
 
 		// Check that cleared flags are kept blank when converting back:
@@ -886,7 +972,8 @@ mod tests {
 	fn convert_to_context_with_unknown_flags() {
 		// Ensure the `from` context has fewer known feature bytes than the `to` context.
 		assert!(InvoiceFeatures::known().flags.len() < NodeFeatures::known().flags.len());
-		let invoice_features = InvoiceFeatures::known().set_unknown_feature_optional();
+		let mut invoice_features = InvoiceFeatures::known();
+		invoice_features.set_unknown_feature_optional();
 		assert!(invoice_features.supports_unknown_bits());
 		let node_features: NodeFeatures = invoice_features.to_context();
 		assert!(!node_features.supports_unknown_bits());
@@ -894,9 +981,9 @@ mod tests {
 
 	#[test]
 	fn set_feature_bits() {
-		let features = InvoiceFeatures::empty()
-			.set_basic_mpp_optional()
-			.set_payment_secret_required();
+		let mut features = InvoiceFeatures::empty();
+		features.set_basic_mpp_optional();
+		features.set_payment_secret_required();
 		assert!(features.supports_basic_mpp());
 		assert!(!features.requires_basic_mpp());
 		assert!(features.requires_payment_secret());
@@ -938,7 +1025,8 @@ mod tests {
 	fn test_channel_type_mapping() {
 		// If we map an InvoiceFeatures with StaticRemoteKey optional, it should map into a
 		// required-StaticRemoteKey ChannelTypeFeatures.
-		let init_features = InitFeatures::empty().set_static_remote_key_optional();
+		let mut init_features = InitFeatures::empty();
+		init_features.set_static_remote_key_optional();
 		let converted_features = ChannelTypeFeatures::from_counterparty_init(&init_features);
 		assert_eq!(converted_features, ChannelTypeFeatures::only_static_remote_key());
 		assert!(!converted_features.supports_any_optional_bits());

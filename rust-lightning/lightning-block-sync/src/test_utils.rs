@@ -6,6 +6,8 @@ use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::hash_types::BlockHash;
 use bitcoin::network::constants::Network;
 use bitcoin::util::uint::Uint256;
+use bitcoin::util::hash::bitcoin_merkle_root;
+use bitcoin::Transaction;
 
 use lightning::chain;
 
@@ -37,16 +39,27 @@ impl Blockchain {
 			let prev_block = &self.blocks[i - 1];
 			let prev_blockhash = prev_block.block_hash();
 			let time = prev_block.header.time + height as u32;
+			// Must have at least one transaction, because the merkle root is not defined for an empty block
+			// and we would fail when we later checked, as of bitcoin crate 0.28.0.
+			// Note that elsewhere in tests we assume that the merkle root of an empty block is all zeros,
+			// but that's OK because those tests don't trigger the check.
+			let coinbase = Transaction {
+				version: 0,
+				lock_time: 0,
+				input: vec![],
+				output: vec![]
+			};
+			let merkle_root = bitcoin_merkle_root(vec![coinbase.txid().as_hash()].into_iter()).unwrap();
 			self.blocks.push(Block {
 				header: BlockHeader {
 					version: 0,
 					prev_blockhash,
-					merkle_root: Default::default(),
+					merkle_root: merkle_root.into(),
 					time,
 					bits,
 					nonce: 0,
 				},
-				txdata: vec![],
+				txdata: vec![coinbase],
 			});
 		}
 		self
@@ -113,7 +126,7 @@ impl Blockchain {
 }
 
 impl BlockSource for Blockchain {
-	fn get_header<'a>(&'a mut self, header_hash: &'a BlockHash, _height_hint: Option<u32>) -> AsyncBlockSourceResult<'a, BlockHeaderData> {
+	fn get_header<'a>(&'a self, header_hash: &'a BlockHash, _height_hint: Option<u32>) -> AsyncBlockSourceResult<'a, BlockHeaderData> {
 		Box::pin(async move {
 			if self.without_headers {
 				return Err(BlockSourceError::persistent("header not found"));
@@ -133,7 +146,7 @@ impl BlockSource for Blockchain {
 		})
 	}
 
-	fn get_block<'a>(&'a mut self, header_hash: &'a BlockHash) -> AsyncBlockSourceResult<'a, Block> {
+	fn get_block<'a>(&'a self, header_hash: &'a BlockHash) -> AsyncBlockSourceResult<'a, Block> {
 		Box::pin(async move {
 			for (height, block) in self.blocks.iter().enumerate() {
 				if block.header.block_hash() == *header_hash {
@@ -150,7 +163,7 @@ impl BlockSource for Blockchain {
 		})
 	}
 
-	fn get_best_block<'a>(&'a mut self) -> AsyncBlockSourceResult<'a, (BlockHash, Option<u32>)> {
+	fn get_best_block<'a>(&'a self) -> AsyncBlockSourceResult<'a, (BlockHash, Option<u32>)> {
 		Box::pin(async move {
 			match self.blocks.last() {
 				None => Err(BlockSourceError::transient("empty chain")),
@@ -166,7 +179,7 @@ impl BlockSource for Blockchain {
 pub struct NullChainListener;
 
 impl chain::Listen for NullChainListener {
-	fn block_connected(&self, _block: &Block, _height: u32) {}
+	fn filtered_block_connected(&self, _header: &BlockHeader, _txdata: &chain::transaction::TransactionData, _height: u32) {}
 	fn block_disconnected(&self, _header: &BlockHeader, _height: u32) {}
 }
 
@@ -195,13 +208,13 @@ impl MockChainListener {
 }
 
 impl chain::Listen for MockChainListener {
-	fn block_connected(&self, block: &Block, height: u32) {
+	fn filtered_block_connected(&self, header: &BlockHeader, _txdata: &chain::transaction::TransactionData, height: u32) {
 		match self.expected_blocks_connected.borrow_mut().pop_front() {
 			None => {
-				panic!("Unexpected block connected: {:?}", block.block_hash());
+				panic!("Unexpected block connected: {:?}", header.block_hash());
 			},
 			Some(expected_block) => {
-				assert_eq!(block.block_hash(), expected_block.header.block_hash());
+				assert_eq!(header.block_hash(), expected_block.header.block_hash());
 				assert_eq!(height, expected_block.height);
 			},
 		}

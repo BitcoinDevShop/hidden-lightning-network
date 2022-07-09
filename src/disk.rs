@@ -1,8 +1,10 @@
 use crate::cli;
 use crate::ChannelManager;
-use bitcoin::hash_types::{BlockHash, Txid};
+use crate::NetworkGraph;
+use bitcoin::hash_types::Txid;
 use bitcoin::hashes::hex::{FromHex, ToHex};
-use bitcoin::secp256k1::key::PublicKey;
+use bitcoin::secp256k1::PublicKey;
+use bitcoin::BlockHash;
 use chrono::Utc;
 use lightning::chain::chainmonitor;
 use std::io::Cursor;
@@ -12,7 +14,7 @@ use lightning::chain;
 use lightning::chain::channelmonitor::{ChannelMonitor, ChannelMonitorUpdate};
 use lightning::chain::keysinterface::Sign;
 use lightning::chain::transaction::OutPoint;
-use lightning::routing::network_graph::NetworkGraph;
+// use lightning::routing::network_graph::NetworkGraph;
 use lightning::routing::scoring::{ProbabilisticScorer, ProbabilisticScoringParameters};
 use lightning::util::logger::{Logger, Record};
 use lightning::util::ser::{Readable, ReadableArgs, Writeable, Writer};
@@ -324,19 +326,20 @@ pub(crate) fn persist_network(path: &Path, network_graph: &NetworkGraph) -> std:
 	}
 }
 
-pub(crate) fn read_network(path: &Path, genesis_hash: BlockHash) -> NetworkGraph {
-	// let now = Instant::now();
+pub(crate) fn read_network(
+	path: &Path, genesis_hash: BlockHash, logger: Arc<FilesystemLogger>,
+) -> NetworkGraph {
 	if let Ok(file) = File::open(path) {
-		if let Ok(graph) = NetworkGraph::read(&mut BufReader::new(file)) {
+		if let Ok(graph) = NetworkGraph::read(&mut BufReader::new(file), logger.clone()) {
 			// println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
 			return graph;
 		}
 	}
-	NetworkGraph::new(genesis_hash)
+	NetworkGraph::new(genesis_hash, logger)
 }
 
 pub(crate) fn persist_scorer(
-	path: &Path, scorer: &ProbabilisticScorer<Arc<NetworkGraph>>,
+	path: &Path, scorer: &ProbabilisticScorer<Arc<NetworkGraph>, Arc<FilesystemLogger>>,
 ) -> std::io::Result<()> {
 	// let now = Instant::now();
 	let mut tmp_path = path.to_path_buf().into_os_string();
@@ -353,17 +356,14 @@ pub(crate) fn persist_scorer(
 }
 
 pub(crate) fn read_scorer(
-	path: &Path, graph: Arc<NetworkGraph>,
-) -> ProbabilisticScorer<Arc<NetworkGraph>> {
-	// let now = Instant::now();
+	path: &Path, graph: Arc<NetworkGraph>, logger: Arc<FilesystemLogger>,
+) -> ProbabilisticScorer<Arc<NetworkGraph>, Arc<FilesystemLogger>> {
 	let params = ProbabilisticScoringParameters::default();
 	if let Ok(file) = File::open(path) {
-		if let Ok(scorer) =
-			ProbabilisticScorer::read(&mut BufReader::new(file), (params, Arc::clone(&graph)))
-		{
-			// println!("Reading {:?} took {}s", path, now.elapsed().as_secs_f64());
+		let args = (params.clone(), Arc::clone(&graph), Arc::clone(&logger));
+		if let Ok(scorer) = ProbabilisticScorer::read(&mut BufReader::new(file), args) {
 			return scorer;
 		}
 	}
-	ProbabilisticScorer::new(params, graph)
+	ProbabilisticScorer::new(params, graph, logger)
 }

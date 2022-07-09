@@ -17,9 +17,9 @@ use core::hash::Hash;
 use sync::Mutex;
 use core::cmp;
 
-use bitcoin::secp256k1::Signature;
-use bitcoin::secp256k1::key::{PublicKey, SecretKey};
+use bitcoin::secp256k1::{PublicKey, SecretKey};
 use bitcoin::secp256k1::constants::{PUBLIC_KEY_SIZE, SECRET_KEY_SIZE, COMPACT_SIGNATURE_SIZE};
+use bitcoin::secp256k1::ecdsa::Signature;
 use bitcoin::blockdata::script::Script;
 use bitcoin::blockdata::transaction::{OutPoint, Transaction, TxOut};
 use bitcoin::consensus;
@@ -134,6 +134,13 @@ impl<R: Read> Read for FixedLengthReader<R> {
 	}
 }
 
+impl<R: Read> LengthRead for FixedLengthReader<R> {
+	#[inline]
+	fn total_bytes(&self) -> u64 {
+		self.total_bytes
+	}
+}
+
 /// A Read which tracks whether any bytes have been read at all. This allows us to distinguish
 /// between "EOF reached before we started" and "EOF reached mid-read".
 pub(crate) struct ReadTrackingReader<R: Read> {
@@ -174,6 +181,7 @@ pub trait Writeable {
 	}
 
 	/// Writes self out to a Vec<u8>
+	#[cfg(test)]
 	fn encode_with_len(&self) -> Vec<u8> {
 		let mut msg = VecWriter(Vec::new());
 		0u16.write(&mut msg).unwrap();
@@ -217,6 +225,21 @@ pub trait ReadableArgs<P>
 {
 	/// Reads a Self in from the given Read
 	fn read<R: Read>(reader: &mut R, params: P) -> Result<Self, DecodeError>;
+}
+
+/// A std::io::Read that also provides the total bytes available to read.
+pub(crate) trait LengthRead: Read {
+	/// The total number of bytes available to read.
+	fn total_bytes(&self) -> u64;
+}
+
+/// A trait that various higher-level rust-lightning types implement allowing them to be read in
+/// from a Read given some additional set of arguments which is required to deserialize, requiring
+/// the implementer to provide the total length of the read.
+pub(crate) trait LengthReadableArgs<P> where Self: Sized
+{
+	/// Reads a Self in from the given LengthRead
+	fn read<R: LengthRead>(reader: &mut R, params: P) -> Result<Self, DecodeError>;
 }
 
 /// A trait that various rust-lightning types implement allowing them to (maybe) be read in from a Read
@@ -300,7 +323,7 @@ impl Readable for U48 {
 /// encoded in several different ways, which we must check for at deserialization-time. Thus, if
 /// you're looking for an example of a variable-length integer to use for your own project, move
 /// along, this is a rather poor design.
-pub(crate) struct BigSize(pub u64);
+pub struct BigSize(pub u64);
 impl Writeable for BigSize {
 	#[inline]
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), io::Error> {

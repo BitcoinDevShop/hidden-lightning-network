@@ -12,8 +12,8 @@
 
 use bitcoin::blockdata::script::{Script,Builder};
 use bitcoin::blockdata::opcodes;
-use bitcoin::blockdata::transaction::{TxIn,TxOut,OutPoint,Transaction, SigHashType};
-use bitcoin::util::bip143;
+use bitcoin::blockdata::transaction::{TxIn,TxOut,OutPoint,Transaction, EcdsaSighashType};
+use bitcoin::util::sighash;
 
 use bitcoin::hashes::{Hash, HashEngine};
 use bitcoin::hashes::sha256::Hash as Sha256;
@@ -26,10 +26,10 @@ use util::ser::{Readable, Writeable, Writer};
 use util::{byte_utils, transaction_utils};
 
 use bitcoin::hash_types::WPubkeyHash;
-use bitcoin::secp256k1::key::{SecretKey, PublicKey};
-use bitcoin::secp256k1::{Secp256k1, Signature, Message};
+use bitcoin::secp256k1::{SecretKey, PublicKey};
+use bitcoin::secp256k1::{Secp256k1, ecdsa::Signature, Message};
 use bitcoin::secp256k1::Error as SecpError;
-use bitcoin::secp256k1;
+use bitcoin::{secp256k1, Witness};
 
 use io;
 use prelude::*;
@@ -39,6 +39,7 @@ use util::transaction_utils::sort_outputs;
 use ln::channel::{INITIAL_COMMITMENT_NUMBER, ANCHOR_OUTPUT_VALUE_SATOSHI};
 use core::ops::Deref;
 use chain;
+use util::crypto::sign;
 
 pub(crate) const MAX_HTLCS: u16 = 483;
 
@@ -101,7 +102,7 @@ pub fn build_closing_transaction(to_holder_value_sat: u64, to_counterparty_value
 			previous_output: funding_outpoint,
 			script_sig: Script::new(),
 			sequence: 0xffffffff,
-			witness: Vec::new(),
+			witness: Witness::new(),
 		});
 		ins
 	};
@@ -138,7 +139,7 @@ pub fn build_closing_transaction(to_holder_value_sat: u64, to_counterparty_value
 }
 
 /// Implements the per-commitment secret storage scheme from
-/// [BOLT 3](https://github.com/lightningnetwork/lightning-rfc/blob/dcbf8583976df087c79c3ce0b535311212e6812d/03-transactions.md#efficient-per-commitment-secret-storage).
+/// [BOLT 3](https://github.com/lightning/bolts/blob/dcbf8583976df087c79c3ce0b535311212e6812d/03-transactions.md#efficient-per-commitment-secret-storage).
 ///
 /// Allows us to keep track of all of the revocation secrets of our counterparty in just 50*32 bytes
 /// or so.
@@ -614,7 +615,7 @@ pub fn build_htlc_transaction(commitment_txid: &Txid, feerate_per_kw: u32, conte
 		},
 		script_sig: Script::new(),
 		sequence: if opt_anchors { 1 } else { 0 },
-		witness: Vec::new(),
+		witness: Witness::new(),
 	});
 
 	let weight = if htlc.offered {
@@ -841,7 +842,7 @@ impl HolderCommitmentTransaction {
 	pub fn dummy() -> Self {
 		let secp_ctx = Secp256k1::new();
 		let dummy_key = PublicKey::from_secret_key(&secp_ctx, &SecretKey::from_slice(&[42; 32]).unwrap());
-		let dummy_sig = secp_ctx.sign(&secp256k1::Message::from_slice(&[42; 32]).unwrap(), &SecretKey::from_slice(&[42; 32]).unwrap());
+		let dummy_sig = sign(&secp_ctx, &secp256k1::Message::from_slice(&[42; 32]).unwrap(), &SecretKey::from_slice(&[42; 32]).unwrap());
 
 		let keys = TxCreationKeys {
 			per_commitment_point: dummy_key.clone(),
@@ -890,16 +891,18 @@ impl HolderCommitmentTransaction {
 		// First push the multisig dummy, note that due to BIP147 (NULLDUMMY) it must be a zero-length element.
 		let mut tx = self.inner.built.transaction.clone();
 		tx.input[0].witness.push(Vec::new());
+		let mut ser_holder_sig = holder_sig.serialize_der().to_vec();
+		ser_holder_sig.push(EcdsaSighashType::All as u8);
+		let mut ser_cp_sig = self.counterparty_sig.serialize_der().to_vec();
+		ser_cp_sig.push(EcdsaSighashType::All as u8);
 
 		if self.holder_sig_first {
-			tx.input[0].witness.push(holder_sig.serialize_der().to_vec());
-			tx.input[0].witness.push(self.counterparty_sig.serialize_der().to_vec());
+			tx.input[0].witness.push(ser_holder_sig);
+			tx.input[0].witness.push(ser_cp_sig);
 		} else {
-			tx.input[0].witness.push(self.counterparty_sig.serialize_der().to_vec());
-			tx.input[0].witness.push(holder_sig.serialize_der().to_vec());
+			tx.input[0].witness.push(ser_cp_sig);
+			tx.input[0].witness.push(ser_holder_sig);
 		}
-		tx.input[0].witness[1].push(SigHashType::All as u8);
-		tx.input[0].witness[2].push(SigHashType::All as u8);
 
 		tx.input[0].witness.push(funding_redeemscript.as_bytes().to_vec());
 		tx
@@ -928,7 +931,7 @@ impl BuiltCommitmentTransaction {
 	///
 	/// This can be used to verify a signature.
 	pub fn get_sighash_all(&self, funding_redeemscript: &Script, channel_value_satoshis: u64) -> Message {
-		let sighash = &bip143::SigHashCache::new(&self.transaction).signature_hash(0, funding_redeemscript, channel_value_satoshis, SigHashType::All)[..];
+		let sighash = &sighash::SighashCache::new(&self.transaction).segwit_signature_hash(0, funding_redeemscript, channel_value_satoshis, EcdsaSighashType::All).unwrap()[..];
 		hash_to_message!(sighash)
 	}
 
@@ -936,7 +939,7 @@ impl BuiltCommitmentTransaction {
 	/// because we are about to broadcast a holder transaction.
 	pub fn sign<T: secp256k1::Signing>(&self, funding_key: &SecretKey, funding_redeemscript: &Script, channel_value_satoshis: u64, secp_ctx: &Secp256k1<T>) -> Signature {
 		let sighash = self.get_sighash_all(funding_redeemscript, channel_value_satoshis);
-		secp_ctx.sign(&sighash, funding_key)
+		sign(secp_ctx, &sighash, funding_key)
 	}
 }
 
@@ -1052,7 +1055,7 @@ impl<'a> TrustedClosingTransaction<'a> {
 	///
 	/// This can be used to verify a signature.
 	pub fn get_sighash_all(&self, funding_redeemscript: &Script, channel_value_satoshis: u64) -> Message {
-		let sighash = &bip143::SigHashCache::new(&self.inner.built).signature_hash(0, funding_redeemscript, channel_value_satoshis, SigHashType::All)[..];
+		let sighash = &sighash::SighashCache::new(&self.inner.built).segwit_signature_hash(0, funding_redeemscript, channel_value_satoshis, EcdsaSighashType::All).unwrap()[..];
 		hash_to_message!(sighash)
 	}
 
@@ -1060,7 +1063,7 @@ impl<'a> TrustedClosingTransaction<'a> {
 	/// because we are about to broadcast a holder transaction.
 	pub fn sign<T: secp256k1::Signing>(&self, funding_key: &SecretKey, funding_redeemscript: &Script, channel_value_satoshis: u64, secp_ctx: &Secp256k1<T>) -> Signature {
 		let sighash = self.get_sighash_all(funding_redeemscript, channel_value_satoshis);
-		secp_ctx.sign(&sighash, funding_key)
+		sign(secp_ctx, &sighash, funding_key)
 	}
 }
 
@@ -1290,7 +1293,7 @@ impl CommitmentTransaction {
 				script_sig: Script::new(),
 				sequence: ((0x80 as u32) << 8 * 3)
 					| ((obscured_commitment_transaction_number >> 3 * 8) as u32),
-				witness: Vec::new(),
+				witness: Witness::new(),
 			});
 			ins
 		};
@@ -1400,7 +1403,7 @@ impl<'a> TrustedCommitmentTransaction<'a> {
 	///
 	/// The returned Vec has one entry for each HTLC, and in the same order.
 	///
-	/// This function is only valid in the holder commitment context, it always uses SigHashType::All.
+	/// This function is only valid in the holder commitment context, it always uses EcdsaSighashType::All.
 	pub fn get_htlc_sigs<T: secp256k1::Signing>(&self, htlc_base_key: &SecretKey, channel_parameters: &DirectedChannelTransactionParameters, secp_ctx: &Secp256k1<T>) -> Result<Vec<Signature>, ()> {
 		let inner = self.inner;
 		let keys = &inner.keys;
@@ -1414,8 +1417,8 @@ impl<'a> TrustedCommitmentTransaction<'a> {
 
 			let htlc_redeemscript = get_htlc_redeemscript_with_explicit_keys(&this_htlc, self.opt_anchors(), &keys.broadcaster_htlc_key, &keys.countersignatory_htlc_key, &keys.revocation_key);
 
-			let sighash = hash_to_message!(&bip143::SigHashCache::new(&htlc_tx).signature_hash(0, &htlc_redeemscript, this_htlc.amount_msat / 1000, SigHashType::All)[..]);
-			ret.push(secp_ctx.sign(&sighash, &holder_htlc_key));
+			let sighash = hash_to_message!(&sighash::SighashCache::new(&htlc_tx).segwit_signature_hash(0, &htlc_redeemscript, this_htlc.amount_msat / 1000, EcdsaSighashType::All).unwrap()[..]);
+			ret.push(sign(secp_ctx, &sighash, &holder_htlc_key));
 		}
 		Ok(ret)
 	}
@@ -1436,15 +1439,17 @@ impl<'a> TrustedCommitmentTransaction<'a> {
 
 		let htlc_redeemscript = get_htlc_redeemscript_with_explicit_keys(&this_htlc, self.opt_anchors(), &keys.broadcaster_htlc_key, &keys.countersignatory_htlc_key, &keys.revocation_key);
 
-		let sighashtype = if self.opt_anchors() { SigHashType::SinglePlusAnyoneCanPay } else { SigHashType::All };
+		let sighashtype = if self.opt_anchors() { EcdsaSighashType::SinglePlusAnyoneCanPay } else { EcdsaSighashType::All };
 
 		// First push the multisig dummy, note that due to BIP147 (NULLDUMMY) it must be a zero-length element.
 		htlc_tx.input[0].witness.push(Vec::new());
 
-		htlc_tx.input[0].witness.push(counterparty_signature.serialize_der().to_vec());
-		htlc_tx.input[0].witness.push(signature.serialize_der().to_vec());
-		htlc_tx.input[0].witness[1].push(sighashtype as u8);
-		htlc_tx.input[0].witness[2].push(SigHashType::All as u8);
+		let mut cp_sig_ser = counterparty_signature.serialize_der().to_vec();
+		cp_sig_ser.push(sighashtype as u8);
+		htlc_tx.input[0].witness.push(cp_sig_ser);
+		let mut holder_sig_ser = signature.serialize_der().to_vec();
+		holder_sig_ser.push(EcdsaSighashType::All as u8);
+		htlc_tx.input[0].witness.push(holder_sig_ser);
 
 		if this_htlc.offered {
 			// Due to BIP146 (MINIMALIF) this must be a zero-length element to relay.

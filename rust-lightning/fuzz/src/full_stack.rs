@@ -37,7 +37,7 @@ use lightning::ln::channelmanager::{ChainParameters, ChannelManager};
 use lightning::ln::peer_handler::{MessageHandler,PeerManager,SocketDescriptor,IgnoringMessageHandler};
 use lightning::ln::msgs::DecodeError;
 use lightning::ln::script::ShutdownScript;
-use lightning::routing::network_graph::{NetGraphMsgHandler, NetworkGraph};
+use lightning::routing::gossip::{P2PGossipSync, NetworkGraph};
 use lightning::routing::router::{find_route, PaymentParameters, RouteParameters};
 use lightning::routing::scoring::FixedPenaltyScorer;
 use lightning::util::config::UserConfig;
@@ -50,8 +50,8 @@ use lightning::util::ser::ReadableArgs;
 use utils::test_logger;
 use utils::test_persister::TestPersister;
 
-use bitcoin::secp256k1::key::{PublicKey,SecretKey};
-use bitcoin::secp256k1::recovery::RecoverableSignature;
+use bitcoin::secp256k1::{PublicKey,SecretKey};
+use bitcoin::secp256k1::ecdsa::RecoverableSignature;
 use bitcoin::secp256k1::Secp256k1;
 
 use std::cell::RefCell;
@@ -163,7 +163,7 @@ type ChannelMan = ChannelManager<
 	EnforcingSigner,
 	Arc<chainmonitor::ChainMonitor<EnforcingSigner, Arc<dyn chain::Filter>, Arc<TestBroadcaster>, Arc<FuzzEstimator>, Arc<dyn Logger>, Arc<TestPersister>>>,
 	Arc<TestBroadcaster>, Arc<KeyProvider>, Arc<FuzzEstimator>, Arc<dyn Logger>>;
-type PeerMan<'a> = PeerManager<Peer<'a>, Arc<ChannelMan>, Arc<NetGraphMsgHandler<Arc<NetworkGraph>, Arc<dyn chain::Access>, Arc<dyn Logger>>>, Arc<dyn Logger>, IgnoringMessageHandler>;
+type PeerMan<'a> = PeerManager<Peer<'a>, Arc<ChannelMan>, Arc<P2PGossipSync<Arc<NetworkGraph<Arc<dyn Logger>>>, Arc<dyn chain::Access>, Arc<dyn Logger>>>, Arc<dyn Logger>, IgnoringMessageHandler>;
 
 struct MoneyLossDetector<'a> {
 	manager: Arc<ChannelMan>,
@@ -252,7 +252,7 @@ impl<'a> Drop for MoneyLossDetector<'a> {
 			}
 
 			// Force all channels onto the chain (and time out claim txn)
-			self.manager.force_close_all_channels();
+			self.manager.force_close_all_channels_broadcasting_latest_txn();
 		}
 	}
 }
@@ -382,8 +382,8 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 
 	let keys_manager = Arc::new(KeyProvider { node_secret: our_network_key.clone(), inbound_payment_key: KeyMaterial(inbound_payment_key.try_into().unwrap()), counter: AtomicU64::new(0) });
 	let mut config = UserConfig::default();
-	config.channel_options.forwarding_fee_proportional_millionths =  slice_to_be32(get_slice!(4));
-	config.channel_options.announced_channel = get_slice!(1)[0] != 0;
+	config.channel_config.forwarding_fee_proportional_millionths =  slice_to_be32(get_slice!(4));
+	config.channel_handshake_config.announced_channel = get_slice!(1)[0] != 0;
 	let network = Network::Bitcoin;
 	let params = ChainParameters {
 		network,
@@ -395,20 +395,20 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 	// it's easier to just increment the counter here so the keys don't change.
 	keys_manager.counter.fetch_sub(1, Ordering::AcqRel);
 	let our_id = PublicKey::from_secret_key(&Secp256k1::signing_only(), &keys_manager.get_node_secret(Recipient::Node).unwrap());
-	let network_graph = Arc::new(NetworkGraph::new(genesis_block(network).block_hash()));
-	let net_graph_msg_handler = Arc::new(NetGraphMsgHandler::new(Arc::clone(&network_graph), None, Arc::clone(&logger)));
+	let network_graph = Arc::new(NetworkGraph::new(genesis_block(network).block_hash(), Arc::clone(&logger)));
+	let gossip_sync = Arc::new(P2PGossipSync::new(Arc::clone(&network_graph), None, Arc::clone(&logger)));
 	let scorer = FixedPenaltyScorer::with_penalty(0);
 
 	let peers = RefCell::new([false; 256]);
 	let mut loss_detector = MoneyLossDetector::new(&peers, channelmanager.clone(), monitor.clone(), PeerManager::new(MessageHandler {
 		chan_handler: channelmanager.clone(),
-		route_handler: net_graph_msg_handler.clone(),
+		route_handler: gossip_sync.clone(),
 	}, our_network_key, &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0], Arc::clone(&logger), IgnoringMessageHandler{}));
 
 	let mut should_forward = false;
 	let mut payments_received: Vec<PaymentHash> = Vec::new();
 	let mut payments_sent = 0;
-	let mut pending_funding_generation: Vec<([u8; 32], u64, Script)> = Vec::new();
+	let mut pending_funding_generation: Vec<([u8; 32], PublicKey, u64, Script)> = Vec::new();
 	let mut pending_funding_signatures = HashMap::new();
 
 	loop {
@@ -422,7 +422,7 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 					}
 				}
 				if new_id == 0 { return; }
-				loss_detector.handler.new_outbound_connection(get_pubkey!(), Peer{id: (new_id - 1) as u8, peers_connected: &peers}).unwrap();
+				loss_detector.handler.new_outbound_connection(get_pubkey!(), Peer{id: (new_id - 1) as u8, peers_connected: &peers}, None).unwrap();
 				peers.borrow_mut()[new_id - 1] = true;
 			},
 			1 => {
@@ -434,7 +434,7 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 					}
 				}
 				if new_id == 0 { return; }
-				loss_detector.handler.new_inbound_connection(Peer{id: (new_id - 1) as u8, peers_connected: &peers}).unwrap();
+				loss_detector.handler.new_inbound_connection(Peer{id: (new_id - 1) as u8, peers_connected: &peers}, None).unwrap();
 				peers.borrow_mut()[new_id - 1] = true;
 			},
 			2 => {
@@ -459,7 +459,8 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 					final_value_msat,
 					final_cltv_expiry_delta: 42,
 				};
-				let route = match find_route(&our_id, &params, &network_graph, None, Arc::clone(&logger), &scorer) {
+				let random_seed_bytes: [u8; 32] = keys_manager.get_secure_random_bytes();
+				let route = match find_route(&our_id, &params, &network_graph, None, Arc::clone(&logger), &scorer, &random_seed_bytes) {
 					Ok(route) => route,
 					Err(_) => return,
 				};
@@ -482,7 +483,8 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 					final_value_msat,
 					final_cltv_expiry_delta: 42,
 				};
-				let mut route = match find_route(&our_id, &params, &network_graph, None, Arc::clone(&logger), &scorer) {
+				let random_seed_bytes: [u8; 32] = keys_manager.get_secure_random_bytes();
+				let mut route = match find_route(&our_id, &params, &network_graph, None, Arc::clone(&logger), &scorer, &random_seed_bytes) {
 					Ok(route) => route,
 					Err(_) => return,
 				};
@@ -514,7 +516,7 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 				let channel_id = get_slice!(1)[0] as usize;
 				if channel_id >= channels.len() { return; }
 				channels.sort_by(|a, b| { a.channel_id.cmp(&b.channel_id) });
-				if channelmanager.close_channel(&channels[channel_id].channel_id).is_err() { return; }
+				if channelmanager.close_channel(&channels[channel_id].channel_id, &channels[channel_id].counterparty.node_id).is_err() { return; }
 			},
 			7 => {
 				if should_forward {
@@ -554,7 +556,7 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 			10 => {
 				'outer_loop: for funding_generation in pending_funding_generation.drain(..) {
 					let mut tx = Transaction { version: 0, lock_time: 0, input: Vec::new(), output: vec![TxOut {
-							value: funding_generation.1, script_pubkey: funding_generation.2,
+							value: funding_generation.2, script_pubkey: funding_generation.3,
 						}] };
 					let funding_output = 'search_loop: loop {
 						let funding_txid = tx.txid();
@@ -573,7 +575,7 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 							continue 'outer_loop;
 						}
 					};
-					if let Err(e) = channelmanager.funding_transaction_generated(&funding_generation.0, tx.clone()) {
+					if let Err(e) = channelmanager.funding_transaction_generated(&funding_generation.0, &funding_generation.1, tx.clone()) {
 						// It's possible the channel has been closed in the mean time, but any other
 						// failure may be a bug.
 						if let APIError::ChannelUnavailable { err } = e {
@@ -622,7 +624,7 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 				let channel_id = get_slice!(1)[0] as usize;
 				if channel_id >= channels.len() { return; }
 				channels.sort_by(|a, b| { a.channel_id.cmp(&b.channel_id) });
-				channelmanager.force_close_channel(&channels[channel_id].channel_id).unwrap();
+				channelmanager.force_close_broadcasting_latest_txn(&channels[channel_id].channel_id, &channels[channel_id].counterparty.node_id).unwrap();
 			},
 			// 15 is above
 			_ => return,
@@ -630,8 +632,8 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 		loss_detector.handler.process_events();
 		for event in loss_detector.manager.get_and_clear_pending_events() {
 			match event {
-				Event::FundingGenerationReady { temporary_channel_id, channel_value_satoshis, output_script, .. } => {
-					pending_funding_generation.push((temporary_channel_id, channel_value_satoshis, output_script));
+				Event::FundingGenerationReady { temporary_channel_id, counterparty_node_id, channel_value_satoshis, output_script, .. } => {
+					pending_funding_generation.push((temporary_channel_id, counterparty_node_id, channel_value_satoshis, output_script));
 				},
 				Event::PaymentReceived { payment_hash, .. } => {
 					//TODO: enhance by fetching random amounts from fuzz input?
@@ -737,12 +739,12 @@ mod tests {
 		// 0c0000 - connect a block with no transactions
 		// 0c0000 - connect a block with no transactions
 		// 0c0000 - connect a block with no transactions
-		// - by now client should have sent a funding_locked (CHECK 3: SendFundingLocked to 03000000 for chan 3d000000)
+		// - by now client should have sent a channel_ready (CHECK 3: SendChannelReady to 03000000 for chan 3d000000)
 		//
 		// 030012 - inbound read from peer id 0 of len 18
 		// 0043 03000000000000000000000000000000 - message header indicating message length 67
 		// 030053 - inbound read from peer id 0 of len 83
-		// 0024 3d00000000000000000000000000000000000000000000000000000000000000 020800000000000000000000000000000000000000000000000000000000000000 03000000000000000000000000000000 - funding_locked and mac
+		// 0024 3d00000000000000000000000000000000000000000000000000000000000000 020800000000000000000000000000000000000000000000000000000000000000 03000000000000000000000000000000 - channel_ready and mac
 		//
 		// 01 - new inbound connection with id 1
 		// 030132 - inbound read from peer id 1 of len 50
@@ -773,12 +775,12 @@ mod tests {
 		// 0023 3a00000000000000000000000000000000000000000000000000000000000000 000000000000000000000000000000000000000000000000000000000000007c0001000000000000000000000000000000000000000000000000000000000000 01000000000000000000000000000000 - funding_signed message and mac
 		//
 		// 0b - broadcast funding transaction
-		// - by now client should have sent a funding_locked (CHECK 4: SendFundingLocked to 03020000 for chan 3f000000)
+		// - by now client should have sent a channel_ready (CHECK 4: SendChannelReady to 03020000 for chan 3f000000)
 		//
 		// 030112 - inbound read from peer id 1 of len 18
 		// 0043 01000000000000000000000000000000 - message header indicating message length 67
 		// 030153 - inbound read from peer id 1 of len 83
-		// 0024 3a00000000000000000000000000000000000000000000000000000000000000 026700000000000000000000000000000000000000000000000000000000000000 01000000000000000000000000000000 - funding_locked and mac
+		// 0024 3a00000000000000000000000000000000000000000000000000000000000000 026700000000000000000000000000000000000000000000000000000000000000 01000000000000000000000000000000 - channel_ready and mac
 		//
 		// 030012 - inbound read from peer id 0 of len 18
 		// 05ac 03000000000000000000000000000000 - message header indicating message length 1452
@@ -962,8 +964,8 @@ mod tests {
 		let log_entries = logger.lines.lock().unwrap();
 		assert_eq!(log_entries.get(&("lightning::ln::peer_handler".to_string(), "Handling SendAcceptChannel event in peer_handler for node 030000000000000000000000000000000000000000000000000000000000000002 for channel ff4f00f805273c1b203bb5ebf8436bfde57b3be8c2f5e95d9491dbb181909679".to_string())), Some(&1)); // 1
 		assert_eq!(log_entries.get(&("lightning::ln::peer_handler".to_string(), "Handling SendFundingSigned event in peer_handler for node 030000000000000000000000000000000000000000000000000000000000000002 for channel 3d00000000000000000000000000000000000000000000000000000000000000".to_string())), Some(&1)); // 2
-		assert_eq!(log_entries.get(&("lightning::ln::peer_handler".to_string(), "Handling SendFundingLocked event in peer_handler for node 030000000000000000000000000000000000000000000000000000000000000002 for channel 3d00000000000000000000000000000000000000000000000000000000000000".to_string())), Some(&1)); // 3
-		assert_eq!(log_entries.get(&("lightning::ln::peer_handler".to_string(), "Handling SendFundingLocked event in peer_handler for node 030200000000000000000000000000000000000000000000000000000000000000 for channel 3a00000000000000000000000000000000000000000000000000000000000000".to_string())), Some(&1)); // 4
+		assert_eq!(log_entries.get(&("lightning::ln::peer_handler".to_string(), "Handling SendChannelReady event in peer_handler for node 030000000000000000000000000000000000000000000000000000000000000002 for channel 3d00000000000000000000000000000000000000000000000000000000000000".to_string())), Some(&1)); // 3
+		assert_eq!(log_entries.get(&("lightning::ln::peer_handler".to_string(), "Handling SendChannelReady event in peer_handler for node 030200000000000000000000000000000000000000000000000000000000000000 for channel 3a00000000000000000000000000000000000000000000000000000000000000".to_string())), Some(&1)); // 4
 		assert_eq!(log_entries.get(&("lightning::ln::peer_handler".to_string(), "Handling SendRevokeAndACK event in peer_handler for node 030000000000000000000000000000000000000000000000000000000000000002 for channel 3d00000000000000000000000000000000000000000000000000000000000000".to_string())), Some(&4)); // 5
 		assert_eq!(log_entries.get(&("lightning::ln::peer_handler".to_string(), "Handling UpdateHTLCs event in peer_handler for node 030000000000000000000000000000000000000000000000000000000000000002 with 0 adds, 0 fulfills, 0 fails for channel 3d00000000000000000000000000000000000000000000000000000000000000".to_string())), Some(&3)); // 6
 		assert_eq!(log_entries.get(&("lightning::ln::peer_handler".to_string(), "Handling UpdateHTLCs event in peer_handler for node 030200000000000000000000000000000000000000000000000000000000000000 with 1 adds, 0 fulfills, 0 fails for channel 3a00000000000000000000000000000000000000000000000000000000000000".to_string())), Some(&3)); // 7

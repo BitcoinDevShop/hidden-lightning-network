@@ -24,8 +24,8 @@
 //! raw socket events into your non-internet-facing system and then send routing events back to
 //! track the network on the less-secure system.
 
-use bitcoin::secp256k1::key::PublicKey;
-use bitcoin::secp256k1::Signature;
+use bitcoin::secp256k1::PublicKey;
+use bitcoin::secp256k1::ecdsa::Signature;
 use bitcoin::secp256k1;
 use bitcoin::blockdata::script::Script;
 use bitcoin::hash_types::{Txid, BlockHash};
@@ -75,6 +75,11 @@ pub enum DecodeError {
 pub struct Init {
 	/// The relevant features which the sender supports
 	pub features: InitFeatures,
+	/// The receipient's network address. This adds the option to report a remote IP address
+	/// back to a connecting peer using the init message. A node can decide to use that information
+	/// to discover a potential update to its public IPv4 address (NAT) and use
+	/// that for a node_announcement update message containing the new address.
+	pub remote_network_address: Option<NetAddress>,
 }
 
 /// An error message to be sent or received from a peer
@@ -234,13 +239,16 @@ pub struct FundingSigned {
 	pub signature: Signature,
 }
 
-/// A funding_locked message to be sent or received from a peer
+/// A channel_ready message to be sent or received from a peer
 #[derive(Clone, Debug, PartialEq)]
-pub struct FundingLocked {
+pub struct ChannelReady {
 	/// The channel ID
 	pub channel_id: [u8; 32],
 	/// The per-commitment point of the second commitment transaction
 	pub next_per_commitment_point: PublicKey,
+	/// If set, provides a short_channel_id alias for this channel. The sender will accept payments
+	/// to be forwarded over this SCID and forward them to this messages' recipient.
+	pub short_channel_id_alias: Option<u64>,
 }
 
 /// A shutdown message to be sent or received from a peer
@@ -622,7 +630,10 @@ pub struct UnsignedChannelUpdate {
 	pub fee_base_msat: u32,
 	/// The amount to fee multiplier, in micro-satoshi
 	pub fee_proportional_millionths: u32,
-	pub(crate) excess_data: Vec<u8>,
+	/// Excess data which was signed as a part of the message which we do not (yet) understand how
+	/// to decode. This is stored to ensure forward-compatibility as new fields are added to the
+	/// lightning gossip
+	pub excess_data: Vec<u8>,
 }
 /// A channel_update message to be sent or received from a peer
 #[derive(Clone, Debug, PartialEq)]
@@ -804,8 +815,8 @@ pub trait ChannelMessageHandler : MessageSendEventsProvider {
 	fn handle_funding_created(&self, their_node_id: &PublicKey, msg: &FundingCreated);
 	/// Handle an incoming funding_signed message from the given peer.
 	fn handle_funding_signed(&self, their_node_id: &PublicKey, msg: &FundingSigned);
-	/// Handle an incoming funding_locked message from the given peer.
-	fn handle_funding_locked(&self, their_node_id: &PublicKey, msg: &FundingLocked);
+	/// Handle an incoming channel_ready message from the given peer.
+	fn handle_channel_ready(&self, their_node_id: &PublicKey, msg: &ChannelReady);
 
 	// Channl close:
 	/// Handle an incoming shutdown message from the given peer.
@@ -883,7 +894,7 @@ pub trait RoutingMessageHandler : MessageSendEventsProvider {
 	/// Called when a connection is established with a peer. This can be used to
 	/// perform routing table synchronization using a strategy defined by the
 	/// implementor.
-	fn sync_routing_table(&self, their_node_id: &PublicKey, init: &Init);
+	fn peer_connected(&self, their_node_id: &PublicKey, init: &Init);
 	/// Handles the reply of a query we initiated to learn about channels
 	/// for a given range of blocks. We can expect to receive one or more
 	/// replies to a single query.
@@ -1152,17 +1163,23 @@ impl_writeable_msg!(FundingSigned, {
 	signature
 }, {});
 
-impl_writeable_msg!(FundingLocked, {
+impl_writeable_msg!(ChannelReady, {
 	channel_id,
 	next_per_commitment_point,
-}, {});
+}, {
+	(1, short_channel_id_alias, option),
+});
 
 impl Writeable for Init {
 	fn write<W: Writer>(&self, w: &mut W) -> Result<(), io::Error> {
 		// global_features gets the bottom 13 bits of our features, and local_features gets all of
 		// our relevant feature bits. This keeps us compatible with old nodes.
 		self.features.write_up_to_13(w)?;
-		self.features.write(w)
+		self.features.write(w)?;
+		encode_tlv_stream!(w, {
+			(3, self.remote_network_address, option)
+		});
+		Ok(())
 	}
 }
 
@@ -1170,8 +1187,13 @@ impl Readable for Init {
 	fn read<R: Read>(r: &mut R) -> Result<Self, DecodeError> {
 		let global_features: InitFeatures = Readable::read(r)?;
 		let features: InitFeatures = Readable::read(r)?;
+		let mut remote_network_address: Option<NetAddress> = None;
+		decode_tlv_stream!(r, {
+			(3, remote_network_address, option)
+		});
 		Ok(Init {
 			features: features.or(global_features),
+			remote_network_address,
 		})
 	}
 }
@@ -1816,7 +1838,7 @@ mod tests {
 	use bitcoin::blockdata::opcodes;
 	use bitcoin::hash_types::{Txid, BlockHash};
 
-	use bitcoin::secp256k1::key::{PublicKey,SecretKey};
+	use bitcoin::secp256k1::{PublicKey,SecretKey};
 	use bitcoin::secp256k1::{Secp256k1, Message};
 
 	use io::Cursor;
@@ -1873,7 +1895,7 @@ mod tests {
 		($privkey: expr, $ctx: expr, $string: expr) => {
 			{
 				let sighash = Message::from_slice(&$string.into_bytes()[..]).unwrap();
-				$ctx.sign(&sighash, &$privkey)
+				$ctx.sign_ecdsa(&sighash, &$privkey)
 			}
 		}
 	}
@@ -2136,7 +2158,7 @@ mod tests {
 			htlc_basepoint: pubkey_5,
 			first_per_commitment_point: pubkey_6,
 			channel_flags: if random_bit { 1 << 5 } else { 0 },
-			shutdown_scriptpubkey: if shutdown { OptionalField::Present(Address::p2pkh(&::bitcoin::PublicKey{compressed: true, key: pubkey_1}, Network::Testnet).script_pubkey()) } else { OptionalField::Absent },
+			shutdown_scriptpubkey: if shutdown { OptionalField::Present(Address::p2pkh(&::bitcoin::PublicKey{compressed: true, inner: pubkey_1}, Network::Testnet).script_pubkey()) } else { OptionalField::Absent },
 			channel_type: if incl_chan_type { Some(ChannelTypeFeatures::empty()) } else { None },
 		};
 		let encoded_value = open_channel.encode();
@@ -2192,7 +2214,7 @@ mod tests {
 			delayed_payment_basepoint: pubkey_4,
 			htlc_basepoint: pubkey_5,
 			first_per_commitment_point: pubkey_6,
-			shutdown_scriptpubkey: if shutdown { OptionalField::Present(Address::p2pkh(&::bitcoin::PublicKey{compressed: true, key: pubkey_1}, Network::Testnet).script_pubkey()) } else { OptionalField::Absent },
+			shutdown_scriptpubkey: if shutdown { OptionalField::Present(Address::p2pkh(&::bitcoin::PublicKey{compressed: true, inner: pubkey_1}, Network::Testnet).script_pubkey()) } else { OptionalField::Absent },
 			channel_type: None,
 		};
 		let encoded_value = accept_channel.encode();
@@ -2240,14 +2262,15 @@ mod tests {
 	}
 
 	#[test]
-	fn encoding_funding_locked() {
+	fn encoding_channel_ready() {
 		let secp_ctx = Secp256k1::new();
 		let (_, pubkey_1,) = get_keys_from!("0101010101010101010101010101010101010101010101010101010101010101", secp_ctx);
-		let funding_locked = msgs::FundingLocked {
+		let channel_ready = msgs::ChannelReady {
 			channel_id: [2; 32],
 			next_per_commitment_point: pubkey_1,
+			short_channel_id_alias: None,
 		};
-		let encoded_value = funding_locked.encode();
+		let encoded_value = channel_ready.encode();
 		let target_value = hex::decode("0202020202020202020202020202020202020202020202020202020202020202031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f").unwrap();
 		assert_eq!(encoded_value, target_value);
 	}
@@ -2259,9 +2282,9 @@ mod tests {
 		let shutdown = msgs::Shutdown {
 			channel_id: [2; 32],
 			scriptpubkey:
-				     if script_type == 1 { Address::p2pkh(&::bitcoin::PublicKey{compressed: true, key: pubkey_1}, Network::Testnet).script_pubkey() }
-				else if script_type == 2 { Address::p2sh(&script, Network::Testnet).script_pubkey() }
-				else if script_type == 3 { Address::p2wpkh(&::bitcoin::PublicKey{compressed: true, key: pubkey_1}, Network::Testnet).unwrap().script_pubkey() }
+				     if script_type == 1 { Address::p2pkh(&::bitcoin::PublicKey{compressed: true, inner: pubkey_1}, Network::Testnet).script_pubkey() }
+				else if script_type == 2 { Address::p2sh(&script, Network::Testnet).unwrap().script_pubkey() }
+				else if script_type == 3 { Address::p2wpkh(&::bitcoin::PublicKey{compressed: true, inner: pubkey_1}, Network::Testnet).unwrap().script_pubkey() }
 				else                     { Address::p2wsh(&script, Network::Testnet).script_pubkey() },
 		};
 		let encoded_value = shutdown.encode();
@@ -2441,13 +2464,27 @@ mod tests {
 	fn encoding_init() {
 		assert_eq!(msgs::Init {
 			features: InitFeatures::from_le_bytes(vec![0xFF, 0xFF, 0xFF]),
+			remote_network_address: None,
 		}.encode(), hex::decode("00023fff0003ffffff").unwrap());
 		assert_eq!(msgs::Init {
 			features: InitFeatures::from_le_bytes(vec![0xFF]),
+			remote_network_address: None,
 		}.encode(), hex::decode("0001ff0001ff").unwrap());
 		assert_eq!(msgs::Init {
 			features: InitFeatures::from_le_bytes(vec![]),
+			remote_network_address: None,
 		}.encode(), hex::decode("00000000").unwrap());
+
+		let init_msg = msgs::Init { features: InitFeatures::from_le_bytes(vec![]),
+			remote_network_address: Some(msgs::NetAddress::IPv4 {
+				addr: [127, 0, 0, 1],
+				port: 1000,
+			}),
+		};
+		let encoded_value = init_msg.encode();
+		let target_value = hex::decode("000000000307017f00000103e8").unwrap();
+		assert_eq!(encoded_value, target_value);
+		assert_eq!(msgs::Init::read(&mut Cursor::new(&target_value)).unwrap(), init_msg);
 	}
 
 	#[test]
