@@ -128,9 +128,13 @@ pub(crate) type InvoicePayer<E> = payment::InvoicePayer<
 
 type Router = DefaultRouter<Arc<NetworkGraph>, Arc<FilesystemLogger>>;
 
+/*
 type GossipSync<P, G, A, L> =
 	lightning_background_processor::GossipSync<P, Arc<P2PGossipSync<G, A, L>>, G, A, L>;
+*/
 
+type GossipSync<P, G, A, L> =
+	lightning_background_processor::GossipSync<P, Arc<RapidGossipSync<G, L>>, G, A, L>;
 /*
 type GossipSync<P, G, A, L> =
 	lightning_background_processor::GossipSync<P, Arc<RapidGossipSync<G, L>>, G, A, L>;
@@ -813,7 +817,7 @@ async fn start_ldk() {
 	));
 
 	// Step 18: Persist ChannelManager
-	let data_dir = ldk_data_dir.clone();
+	// let data_dir = ldk_data_dir.clone();
 	let persister = Arc::new(FilesystemPersister::new(ldk_data_dir.clone()));
 	/*
 	let persist_channel_manager_callback =
@@ -821,19 +825,6 @@ async fn start_ldk() {
 		*/
 
 	// Step 19: Background Processing
-	/*
-	let background_processor = BackgroundProcessor::start(
-		persister,
-		invoice_payer.clone(),
-		chain_monitor.clone(),
-		channel_manager.clone(),
-		GossipSync::P2P(gossip_sync.clone()),
-		peer_manager.clone(),
-		logger.clone(),
-		Some(scorer.clone()),
-	);
-		*/
-
 	let background_processor = BackgroundProcessor::start(
 		persister,
 		invoice_payer.clone(),

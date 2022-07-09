@@ -22,7 +22,7 @@ lightning-invoice = { path="./rust-lightning/lightning-invoice" }
 lightning-net-tokio = { path="./rust-lightning/lightning-net-tokio" }
 lightning-persister = { path="./rust-lightning/lightning-persister" }
 lightning-background-processor = {  path="./rust-lightning/lightning-background-processor" }
-lightning-rapid-gossip-sync = { version = "0.0.109" }
+lightning-rapid-gossip-sync = { path = "./rust-lightning/lightning-rapid-gossip-sync" }
 
 base64 = "0.13.0"
 bitcoin = "0.28.1"
