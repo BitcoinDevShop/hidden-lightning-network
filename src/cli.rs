@@ -731,11 +731,10 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 									break;
 								}
 								let pending_outbound_payments = pending_payments.lock().unwrap();
-								//let mut pending_state = pending_payment_state.lock().unwrap();
 								// Assuming only 1 channel, TODO a better check
 								let len = pending_outbound_payments.keys().len();
 								drop(pending_outbound_payments);
-								if len > 450 {
+								if len > 30 {
 									// wait for pending htlc's to clear
 									log_trace!(logger, "Close to max htlc's, waiting...");
 									thread::sleep(Duration::from_millis(50));
