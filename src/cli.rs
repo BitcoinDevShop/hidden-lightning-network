@@ -204,7 +204,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 	outbound_payments: PaymentInfoStorage, pending_payments: PaymentInfoStorage,
 	ldk_data_dir: String, network: Network, network_graph: Arc<NetworkGraph>,
 	logger: Arc<FilesystemLogger>,
-	_scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>, Arc<FilesystemLogger>>>>,
+	scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>, Arc<FilesystemLogger>>>>,
 	db: Arc<Mutex<rusqlite::Connection>>,
 ) {
 	println!("LDK startup successful. To view available commands: \"help\".");
@@ -446,17 +446,38 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 				"forceclosechannel" => {
 					let channel_id_str = words.next();
 					if channel_id_str.is_none() {
-						println!("ERROR: forceclosechannel requires a channel ID: `forceclosechannel <channel_id>`");
+						println!("ERROR: forceclosechannel requires a channel ID: `forceclosechannel <channel_id> <peer_pubkey>`");
 						continue;
 					}
 					let channel_id_vec = hex_utils::to_vec(channel_id_str.unwrap());
-					if channel_id_vec.is_none() {
-						println!("ERROR: couldn't parse channel_id as hex");
+					if channel_id_vec.is_none() || channel_id_vec.as_ref().unwrap().len() != 32 {
+						println!("ERROR: couldn't parse channel_id");
 						continue;
 					}
 					let mut channel_id = [0; 32];
 					channel_id.copy_from_slice(&channel_id_vec.unwrap());
-					force_close_channel(channel_id, channel_manager.clone());
+
+					let peer_pubkey_str = words.next();
+					if peer_pubkey_str.is_none() {
+						println!("ERROR: forceclosechannel requires a peer pubkey: `forceclosechannel <channel_id> <peer_pubkey>`");
+						continue;
+					}
+					let peer_pubkey_vec = match hex_utils::to_vec(peer_pubkey_str.unwrap()) {
+						Some(peer_pubkey_vec) => peer_pubkey_vec,
+						None => {
+							println!("ERROR: couldn't parse peer_pubkey");
+							continue;
+						}
+					};
+					let peer_pubkey = match PublicKey::from_slice(&peer_pubkey_vec) {
+						Ok(peer_pubkey) => peer_pubkey,
+						Err(_) => {
+							println!("ERROR: couldn't parse peer_pubkey");
+							continue;
+						}
+					};
+
+					force_close_channel(channel_id, peer_pubkey, channel_manager.clone());
 				}
 				"nodeinfo" => node_info(channel_manager.clone(), peer_manager.clone()),
 				"listpeers" => list_peers(peer_manager.clone()),
@@ -489,6 +510,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						&logger,
 						ldk_data_dir.clone(),
 						vec![],
+						&scorer,
 					);
 
 					if let Ok(route) = route {
@@ -512,6 +534,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						&logger,
 						ldk_data_dir.clone(),
 						vec![],
+						&scorer,
 					);
 
 					let fake_preimage = rand::thread_rng().gen::<[u8; 32]>();
@@ -571,6 +594,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						&logger,
 						&ldk_data_dir,
 						pending_payments.clone(),
+						&scorer,
 					) {
 						Ok(_) => continue,
 						Err(_) => continue,
@@ -680,6 +704,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 							&logger,
 							ldk_data_dir.clone(),
 							vec![],
+							&scorer,
 						);
 
 						match route {
@@ -782,6 +807,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 									&logger,
 									&ldk_data_dir,
 									pending_payments.clone(),
+									&scorer,
 								) {
 									Ok(_) => break,
 									Err(_) => {
@@ -1252,7 +1278,7 @@ fn close_channel(
 fn force_close_channel(
 	channel_id: [u8; 32], counterparty_node_id: PublicKey, channel_manager: Arc<ChannelManager>,
 ) {
-	match channel_manager.force_close_channel(&channel_id, &counterparty_node_id) {
+	match channel_manager.force_close_broadcasting_latest_txn(&channel_id, &counterparty_node_id) {
 		Ok(()) => println!("EVENT: initiating channel force-close"),
 		Err(e) => println!("ERROR: failed to force-close channel: {:?}", e),
 	}

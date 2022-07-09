@@ -541,12 +541,13 @@ dependencies = [
  "futures",
  "hex",
  "libc",
- "lightning",
+ "lightning 0.0.109",
  "lightning-background-processor",
  "lightning-block-sync",
  "lightning-invoice",
  "lightning-net-tokio",
  "lightning-persister",
+ "lightning-rapid-gossip-sync 0.0.109 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand",
  "reqwest",
  "rusqlite",
@@ -580,12 +581,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "lightning"
+version = "0.0.109"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "740348ba79a57039390b13236e6a3d7fe5f5c1627702178b9c19cd397e45d07e"
+dependencies = [
+ "bitcoin",
+]
+
+[[package]]
 name = "lightning-background-processor"
 version = "0.0.109"
 dependencies = [
  "bitcoin",
- "lightning",
- "lightning-rapid-gossip-sync",
+ "lightning 0.0.109",
+ "lightning-rapid-gossip-sync 0.0.109",
 ]
 
 [[package]]
@@ -595,7 +605,7 @@ dependencies = [
  "bitcoin",
  "chunked_transfer",
  "futures",
- "lightning",
+ "lightning 0.0.109",
  "serde",
  "serde_json",
 ]
@@ -606,7 +616,7 @@ version = "0.17.0"
 dependencies = [
  "bech32",
  "bitcoin_hashes",
- "lightning",
+ "lightning 0.0.109",
  "num-traits",
  "secp256k1",
 ]
@@ -616,7 +626,7 @@ name = "lightning-net-tokio"
 version = "0.0.109"
 dependencies = [
  "bitcoin",
- "lightning",
+ "lightning 0.0.109",
  "tokio",
 ]
 
@@ -626,7 +636,7 @@ version = "0.0.109"
 dependencies = [
  "bitcoin",
  "libc",
- "lightning",
+ "lightning 0.0.109",
  "winapi",
 ]
 
@@ -635,7 +645,17 @@ name = "lightning-rapid-gossip-sync"
 version = "0.0.109"
 dependencies = [
  "bitcoin",
- "lightning",
+ "lightning 0.0.109",
+]
+
+[[package]]
+name = "lightning-rapid-gossip-sync"
+version = "0.0.109"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bf4769cdd6024aef9d6c016afb70ea76ae572e6313216aac72f6a5b4f9f8ecb"
+dependencies = [
+ "bitcoin",
+ "lightning 0.0.109 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

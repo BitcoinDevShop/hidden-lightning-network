@@ -3,31 +3,32 @@ use crate::disk::FilesystemLogger;
 use crate::{ChannelManager, InvoicePayer, NetworkGraph, PaymentInfo, PaymentInfoStorage};
 use bitcoin::hashes::sha256::Hash as Sha256;
 use bitcoin::hashes::Hash;
-use bitcoin::secp256k1::key::PublicKey;
+use bitcoin::secp256k1::PublicKey;
 use lightning::ln::msgs::ErrorAction;
 use lightning::ln::msgs::LightningError;
 use lightning::ln::{PaymentHash, PaymentPreimage};
-// use lightning::routing::network_graph::{NetworkGraph, RoutingFees};
+use lightning::routing::gossip::RoutingFees;
 use lightning::routing::router::PaymentParameters;
 use lightning::routing::router::Route;
 use lightning::routing::router::RouteParameters;
 use lightning::routing::router::{find_route, RouteHint, RouteHintHop};
 use lightning::routing::scoring::{ProbabilisticScorer, ProbabilisticScoringParameters};
 use lightning::util::logger::Logger;
-use lightning::{log_given_level, log_info, log_internal, log_trace, log_warn};
+use lightning::{log_given_level, log_internal, log_trace, log_warn};
 
 use lightning::util::events::EventHandler;
 use lightning_invoice::payment::Payer;
 
 use rand::Rng;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub(crate) fn probe<E: EventHandler>(
 	pubkey_str: &str, channel_id_str: &str, pubkey_guess: &str, invoice_payer: &InvoicePayer<E>,
 	channel_manager: Arc<ChannelManager>, network_graph: &Arc<NetworkGraph>,
 	logger: &Arc<FilesystemLogger>, ldk_data_dir: &String,
 	pending_payment_state: PaymentInfoStorage,
+	scorer: &Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>, Arc<FilesystemLogger>>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
 	let source_pubkey = PublicKey::from_str(pubkey_str).unwrap();
 	let channel_id = channel_id_str.parse::<u64>();
@@ -55,6 +56,7 @@ pub(crate) fn probe<E: EventHandler>(
 		logger,
 		ldk_data_dir.clone(),
 		next_route_hint,
+		scorer,
 	);
 
 	let route = if let Ok(route) = route {
@@ -92,9 +94,10 @@ pub(crate) fn probe<E: EventHandler>(
 }
 
 pub(crate) fn find_routes<E: EventHandler>(
-	_invoice_payer: &InvoicePayer<E>, channel_manager: Arc<ChannelManager>, payee_pubkey: &str,
+	invoice_payer: &InvoicePayer<E>, channel_manager: Arc<ChannelManager>, payee_pubkey: &str,
 	network: &NetworkGraph, logger: &FilesystemLogger, _ldk_data_dir: String,
 	private_routes: Vec<RouteHint>,
+	scorer: &Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>, Arc<FilesystemLogger>>>>,
 ) -> Result<Route, LightningError> {
 	let our_node_pubkey = channel_manager.get_our_node_id();
 
@@ -113,16 +116,18 @@ pub(crate) fn find_routes<E: EventHandler>(
 	// Insert the fake hops at the end as route hints
 	let first_hops = channel_manager.first_hops();
 
-	let params = ProbabilisticScoringParameters::default();
+	//let params = ProbabilisticScoringParameters::default();
 	// params.liquidity_penalty_multiplier_msat = 100_000;
-	let scorer = ProbabilisticScorer::new(params, network);
+	//let scorer = ProbabilisticScorer::new(params, network);
+	let random_bytes = rand::thread_rng().gen::<[u8; 32]>();
 	let route = find_route(
 		&our_node_pubkey,
 		&route_params,
 		network,
 		Some(&first_hops.iter().collect::<Vec<_>>()),
 		logger,
-		&scorer,
+		&scorer.lock().unwrap(),
+		&random_bytes,
 	);
 
 	route

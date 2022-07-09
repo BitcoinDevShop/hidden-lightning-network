@@ -15,25 +15,28 @@
 //! few other things.
 
 use chain::keysinterface::SpendableOutputDescriptor;
-use ln::channelmanager::PaymentId;
 use ln::channel::FUNDING_CONF_DEADLINE_BLOCKS;
+use ln::channelmanager::PaymentId;
 use ln::features::ChannelTypeFeatures;
 use ln::msgs;
 use ln::msgs::DecodeError;
-use ln::{PaymentPreimage, PaymentHash, PaymentSecret};
+use ln::{PaymentHash, PaymentPreimage, PaymentSecret};
 use routing::gossip::NetworkUpdate;
-use util::ser::{BigSize, FixedLengthReader, Writeable, Writer, MaybeReadable, Readable, VecReadWrapper, VecWriteWrapper};
 use routing::router::{RouteHop, RouteParameters};
+use util::ser::{
+	BigSize, FixedLengthReader, MaybeReadable, Readable, VecReadWrapper, VecWriteWrapper,
+	Writeable, Writer,
+};
 
-use bitcoin::Transaction;
 use bitcoin::blockdata::script::Script;
-use bitcoin::hashes::Hash;
 use bitcoin::hashes::sha256::Hash as Sha256;
+use bitcoin::hashes::Hash;
 use bitcoin::secp256k1::PublicKey;
+use bitcoin::Transaction;
+use core::ops::Deref;
+use core::time::Duration;
 use io;
 use prelude::*;
-use core::time::Duration;
-use core::ops::Deref;
 use sync::Arc;
 
 /// Some information provided on receipt of payment depends on whether the payment received is a
@@ -116,7 +119,7 @@ pub enum ClosureReason {
 	DisconnectedPeer,
 	/// Closure generated from `ChannelManager::read` if the ChannelMonitor is newer than
 	/// the ChannelManager deserialized.
-	OutdatedChannelManager
+	OutdatedChannelManager,
 }
 
 impl core::fmt::Display for ClosureReason {
@@ -126,17 +129,31 @@ impl core::fmt::Display for ClosureReason {
 			ClosureReason::CounterpartyForceClosed { peer_msg } => {
 				f.write_str("counterparty force-closed with message ")?;
 				f.write_str(&peer_msg)
-			},
-			ClosureReason::HolderForceClosed => f.write_str("user manually force-closed the channel"),
-			ClosureReason::CooperativeClosure => f.write_str("the channel was cooperatively closed"),
-			ClosureReason::CommitmentTxConfirmed => f.write_str("commitment or closing transaction was confirmed on chain."),
-			ClosureReason::FundingTimedOut => write!(f, "funding transaction failed to confirm within {} blocks", FUNDING_CONF_DEADLINE_BLOCKS),
+			}
+			ClosureReason::HolderForceClosed => {
+				f.write_str("user manually force-closed the channel")
+			}
+			ClosureReason::CooperativeClosure => {
+				f.write_str("the channel was cooperatively closed")
+			}
+			ClosureReason::CommitmentTxConfirmed => {
+				f.write_str("commitment or closing transaction was confirmed on chain.")
+			}
+			ClosureReason::FundingTimedOut => write!(
+				f,
+				"funding transaction failed to confirm within {} blocks",
+				FUNDING_CONF_DEADLINE_BLOCKS
+			),
 			ClosureReason::ProcessingError { err } => {
 				f.write_str("of an exception: ")?;
 				f.write_str(&err)
-			},
-			ClosureReason::DisconnectedPeer => f.write_str("the peer disconnected prior to the channel being funded"),
-			ClosureReason::OutdatedChannelManager => f.write_str("the ChannelManager read from disk was stale compared to ChannelMonitor(s)"),
+			}
+			ClosureReason::DisconnectedPeer => {
+				f.write_str("the peer disconnected prior to the channel being funded")
+			}
+			ClosureReason::OutdatedChannelManager => f.write_str(
+				"the ChannelManager read from disk was stale compared to ChannelMonitor(s)",
+			),
 		}
 	}
 }
@@ -377,9 +394,9 @@ pub enum Event {
 		/// [`Route`]: crate::routing::router::Route
 		/// [`find_route`]: crate::routing::router::find_route
 		retry: Option<RouteParameters>,
-#[cfg(test)]
+		/// something
 		error_code: Option<u16>,
-#[cfg(test)]
+		/// something
 		error_data: Option<Vec<u8>>,
 	},
 	/// Used to indicate that [`ChannelManager::process_pending_htlc_forwards`] should be called at
@@ -431,7 +448,7 @@ pub enum Event {
 	},
 	/// Used to indicate that a previously opened channel with the given `channel_id` is in the
 	/// process of closure.
-	ChannelClosed  {
+	ChannelClosed {
 		/// The channel_id of the channel which has been closed. Note that on-chain transactions
 		/// resolving the channel are likely still awaiting confirmation.
 		channel_id: [u8; 32],
@@ -446,7 +463,7 @@ pub enum Event {
 		/// [`UserConfig::manually_accept_inbound_channels`]: crate::util::config::UserConfig::manually_accept_inbound_channels
 		user_channel_id: u64,
 		/// The reason the channel was closed.
-		reason: ClosureReason
+		reason: ClosureReason,
 	},
 	/// Used to indicate to the user that they can abandon the funding transaction and recycle the
 	/// inputs for another purpose.
@@ -454,7 +471,7 @@ pub enum Event {
 		/// The channel_id of the channel which has been closed.
 		channel_id: [u8; 32],
 		/// The full transaction received from the user
-		transaction: Transaction
+		transaction: Transaction,
 	},
 	/// Indicates a request to open a new channel by a peer.
 	///
@@ -517,16 +534,19 @@ impl Writeable for Event {
 				0u8.write(writer)?;
 				// We never write out FundingGenerationReady events as, upon disconnection, peers
 				// drop any channels which have not yet exchanged funding_signed.
-			},
+			}
 			&Event::PaymentReceived { ref payment_hash, ref amount_msat, ref purpose } => {
 				1u8.write(writer)?;
 				let mut payment_secret = None;
 				let payment_preimage;
 				match &purpose {
-					PaymentPurpose::InvoicePayment { payment_preimage: preimage, payment_secret: secret } => {
+					PaymentPurpose::InvoicePayment {
+						payment_preimage: preimage,
+						payment_secret: secret,
+					} => {
 						payment_secret = Some(secret);
 						payment_preimage = *preimage;
-					},
+					}
 					PaymentPurpose::SpontaneousPayment(preimage) => {
 						payment_preimage = Some(*preimage);
 					}
@@ -538,8 +558,13 @@ impl Writeable for Event {
 					(6, 0u64, required), // user_payment_id required for compatibility with 0.0.103 and earlier
 					(8, payment_preimage, option),
 				});
-			},
-			&Event::PaymentSent { ref payment_id, ref payment_preimage, ref payment_hash, ref fee_paid_msat } => {
+			}
+			&Event::PaymentSent {
+				ref payment_id,
+				ref payment_preimage,
+				ref payment_hash,
+				ref fee_paid_msat,
+			} => {
 				2u8.write(writer)?;
 				write_tlv_fields!(writer, {
 					(0, payment_preimage, required),
@@ -547,19 +572,21 @@ impl Writeable for Event {
 					(3, payment_id, option),
 					(5, fee_paid_msat, option),
 				});
-			},
+			}
 			&Event::PaymentPathFailed {
-				ref payment_id, ref payment_hash, ref rejected_by_dest, ref network_update,
-				ref all_paths_failed, ref path, ref short_channel_id, ref retry,
-				#[cfg(test)]
+				ref payment_id,
+				ref payment_hash,
+				ref rejected_by_dest,
+				ref network_update,
+				ref all_paths_failed,
+				ref path,
+				ref short_channel_id,
+				ref retry,
 				ref error_code,
-				#[cfg(test)]
 				ref error_data,
 			} => {
 				3u8.write(writer)?;
-				#[cfg(test)]
 				error_code.write(writer)?;
-				#[cfg(test)]
 				error_data.write(writer)?;
 				write_tlv_fields!(writer, {
 					(0, payment_hash, required),
@@ -571,19 +598,24 @@ impl Writeable for Event {
 					(9, retry, option),
 					(11, payment_id, option),
 				});
-			},
+			}
 			&Event::PendingHTLCsForwardable { time_forwardable: _ } => {
 				4u8.write(writer)?;
 				// Note that we now ignore these on the read end as we'll re-generate them in
 				// ChannelManager, we write them here only for backwards compatibility.
-			},
+			}
 			&Event::SpendableOutputs { ref outputs } => {
 				5u8.write(writer)?;
 				write_tlv_fields!(writer, {
 					(0, VecWriteWrapper(outputs), required),
 				});
-			},
-			&Event::PaymentForwarded { fee_earned_msat, prev_channel_id, claim_from_onchain_tx, next_channel_id } => {
+			}
+			&Event::PaymentForwarded {
+				fee_earned_msat,
+				prev_channel_id,
+				claim_from_onchain_tx,
+				next_channel_id,
+			} => {
 				7u8.write(writer)?;
 				write_tlv_fields!(writer, {
 					(0, fee_earned_msat, option),
@@ -591,7 +623,7 @@ impl Writeable for Event {
 					(2, claim_from_onchain_tx, required),
 					(3, next_channel_id, option),
 				});
-			},
+			}
 			&Event::ChannelClosed { ref channel_id, ref user_channel_id, ref reason } => {
 				9u8.write(writer)?;
 				write_tlv_fields!(writer, {
@@ -599,14 +631,14 @@ impl Writeable for Event {
 					(1, user_channel_id, required),
 					(2, reason, required)
 				});
-			},
+			}
 			&Event::DiscardFunding { ref channel_id, ref transaction } => {
 				11u8.write(writer)?;
 				write_tlv_fields!(writer, {
 					(0, channel_id, required),
 					(2, transaction, required)
 				})
-			},
+			}
 			&Event::PaymentPathSuccessful { ref payment_id, ref payment_hash, ref path } => {
 				13u8.write(writer)?;
 				write_tlv_fields!(writer, {
@@ -614,19 +646,19 @@ impl Writeable for Event {
 					(2, payment_hash, option),
 					(4, path, vec_type)
 				})
-			},
+			}
 			&Event::PaymentFailed { ref payment_id, ref payment_hash } => {
 				15u8.write(writer)?;
 				write_tlv_fields!(writer, {
 					(0, payment_id, required),
 					(2, payment_hash, required),
 				})
-			},
+			}
 			&Event::OpenChannelRequest { .. } => {
 				17u8.write(writer)?;
 				// We never write the OpenChannelRequest events as, upon disconnection, peers
 				// drop any channels which have not yet exchanged funding_signed.
-			},
+			}
 			&Event::PaymentClaimed { ref payment_hash, ref amount_msat, ref purpose } => {
 				19u8.write(writer)?;
 				write_tlv_fields!(writer, {
@@ -634,10 +666,9 @@ impl Writeable for Event {
 					(2, purpose, required),
 					(4, amount_msat, required),
 				});
-			},
-			// Note that, going forward, all new events must only write data inside of
-			// `write_tlv_fields`. Versions 0.0.101+ will ignore odd-numbered events that write
-			// data via `write_tlv_fields`.
+			} // Note that, going forward, all new events must only write data inside of
+			  // `write_tlv_fields`. Versions 0.0.101+ will ignore odd-numbered events that write
+			  // data via `write_tlv_fields`.
 		}
 		Ok(())
 	}
@@ -665,19 +696,17 @@ impl MaybeReadable for Event {
 					let purpose = match payment_secret {
 						Some(secret) => PaymentPurpose::InvoicePayment {
 							payment_preimage,
-							payment_secret: secret
+							payment_secret: secret,
 						},
-						None if payment_preimage.is_some() => PaymentPurpose::SpontaneousPayment(payment_preimage.unwrap()),
+						None if payment_preimage.is_some() => {
+							PaymentPurpose::SpontaneousPayment(payment_preimage.unwrap())
+						}
 						None => return Err(msgs::DecodeError::InvalidValue),
 					};
-					Ok(Some(Event::PaymentReceived {
-						payment_hash,
-						amount_msat,
-						purpose,
-					}))
+					Ok(Some(Event::PaymentReceived { payment_hash, amount_msat, purpose }))
 				};
 				f()
-			},
+			}
 			2u8 => {
 				let f = || {
 					let mut payment_preimage = PaymentPreimage([0; 32]);
@@ -691,7 +720,8 @@ impl MaybeReadable for Event {
 						(5, fee_paid_msat, option),
 					});
 					if payment_hash.is_none() {
-						payment_hash = Some(PaymentHash(Sha256::hash(&payment_preimage.0[..]).into_inner()));
+						payment_hash =
+							Some(PaymentHash(Sha256::hash(&payment_preimage.0[..]).into_inner()));
 					}
 					Ok(Some(Event::PaymentSent {
 						payment_id,
@@ -701,12 +731,10 @@ impl MaybeReadable for Event {
 					}))
 				};
 				f()
-			},
+			}
 			3u8 => {
 				let f = || {
-					#[cfg(test)]
 					let error_code = Readable::read(reader)?;
-					#[cfg(test)]
 					let error_data = Readable::read(reader)?;
 					let mut payment_hash = PaymentHash([0; 32]);
 					let mut rejected_by_dest = false;
@@ -735,14 +763,12 @@ impl MaybeReadable for Event {
 						path: path.unwrap(),
 						short_channel_id,
 						retry,
-						#[cfg(test)]
 						error_code,
-						#[cfg(test)]
 						error_data,
 					}))
 				};
 				f()
-			},
+			}
 			4u8 => Ok(None),
 			5u8 => {
 				let f = || {
@@ -753,7 +779,7 @@ impl MaybeReadable for Event {
 					Ok(Some(Event::SpendableOutputs { outputs: outputs.0 }))
 				};
 				f()
-			},
+			}
 			7u8 => {
 				let f = || {
 					let mut fee_earned_msat = None;
@@ -766,10 +792,15 @@ impl MaybeReadable for Event {
 						(2, claim_from_onchain_tx, required),
 						(3, next_channel_id, option),
 					});
-					Ok(Some(Event::PaymentForwarded { fee_earned_msat, prev_channel_id, claim_from_onchain_tx, next_channel_id }))
+					Ok(Some(Event::PaymentForwarded {
+						fee_earned_msat,
+						prev_channel_id,
+						claim_from_onchain_tx,
+						next_channel_id,
+					}))
 				};
 				f()
-			},
+			}
 			9u8 => {
 				let f = || {
 					let mut channel_id = [0; 32];
@@ -780,24 +811,35 @@ impl MaybeReadable for Event {
 						(1, user_channel_id_opt, option),
 						(2, reason, ignorable),
 					});
-					if reason.is_none() { return Ok(None); }
+					if reason.is_none() {
+						return Ok(None);
+					}
 					let user_channel_id = if let Some(id) = user_channel_id_opt { id } else { 0 };
-					Ok(Some(Event::ChannelClosed { channel_id, user_channel_id, reason: reason.unwrap() }))
+					Ok(Some(Event::ChannelClosed {
+						channel_id,
+						user_channel_id,
+						reason: reason.unwrap(),
+					}))
 				};
 				f()
-			},
+			}
 			11u8 => {
 				let f = || {
 					let mut channel_id = [0; 32];
-					let mut transaction = Transaction{ version: 2, lock_time: 0, input: Vec::new(), output: Vec::new() };
+					let mut transaction = Transaction {
+						version: 2,
+						lock_time: 0,
+						input: Vec::new(),
+						output: Vec::new(),
+					};
 					read_tlv_fields!(reader, {
 						(0, channel_id, required),
 						(2, transaction, required),
 					});
-					Ok(Some(Event::DiscardFunding { channel_id, transaction } ))
+					Ok(Some(Event::DiscardFunding { channel_id, transaction }))
 				};
 				f()
-			},
+			}
 			13u8 => {
 				let f = || {
 					let mut payment_id = PaymentId([0; 32]);
@@ -815,7 +857,7 @@ impl MaybeReadable for Event {
 					}))
 				};
 				f()
-			},
+			}
 			15u8 => {
 				let f = || {
 					let mut payment_hash = PaymentHash([0; 32]);
@@ -824,17 +866,14 @@ impl MaybeReadable for Event {
 						(0, payment_id, required),
 						(2, payment_hash, required),
 					});
-					Ok(Some(Event::PaymentFailed {
-						payment_id,
-						payment_hash,
-					}))
+					Ok(Some(Event::PaymentFailed { payment_id, payment_hash }))
 				};
 				f()
-			},
+			}
 			17u8 => {
 				// Value 17 is used for `Event::OpenChannelRequest`.
 				Ok(None)
-			},
+			}
 			19u8 => {
 				let f = || {
 					let mut payment_hash = PaymentHash([0; 32]);
@@ -845,7 +884,9 @@ impl MaybeReadable for Event {
 						(2, purpose, ignorable),
 						(4, amount_msat, required),
 					});
-					if purpose.is_none() { return Ok(None); }
+					if purpose.is_none() {
+						return Ok(None);
+					}
 					Ok(Some(Event::PaymentClaimed {
 						payment_hash,
 						purpose: purpose.unwrap(),
@@ -853,7 +894,7 @@ impl MaybeReadable for Event {
 					}))
 				};
 				f()
-			},
+			}
 			// Versions prior to 0.0.100 did not ignore odd types, instead returning InvalidValue.
 			// Version 0.0.100 failed to properly ignore odd types, possibly resulting in corrupt
 			// reads.
@@ -865,10 +906,11 @@ impl MaybeReadable for Event {
 				// exactly the number of bytes specified, ignoring them entirely.
 				let tlv_len: BigSize = Readable::read(reader)?;
 				FixedLengthReader::new(reader, tlv_len.0)
-					.eat_remaining().map_err(|_| msgs::DecodeError::ShortRead)?;
+					.eat_remaining()
+					.map_err(|_| msgs::DecodeError::ShortRead)?;
 				Ok(None)
-			},
-			_ => Err(msgs::DecodeError::InvalidValue)
+			}
+			_ => Err(msgs::DecodeError::InvalidValue),
 		}
 	}
 }
@@ -996,7 +1038,7 @@ pub enum MessageSendEvent {
 		/// The node_id of the node which should receive this message
 		node_id: PublicKey,
 		/// The action which should be taken.
-		action: msgs::ErrorAction
+		action: msgs::ErrorAction,
 	},
 	/// Query a peer for channels with funding transaction UTXOs in a block range.
 	SendChannelRangeQuery {
@@ -1068,7 +1110,9 @@ pub trait EventsProvider {
 	/// Subsequent calls must only process new events. However, handlers must be capable of handling
 	/// duplicate events across process restarts. This may occur if the provider was recovered from
 	/// an old state (i.e., it hadn't been successfully persisted after processing pending events).
-	fn process_pending_events<H: Deref>(&self, handler: H) where H::Target: EventHandler;
+	fn process_pending_events<H: Deref>(&self, handler: H)
+	where
+		H::Target: EventHandler;
 }
 
 /// A trait implemented for objects handling events from [`EventsProvider`].
@@ -1079,7 +1123,10 @@ pub trait EventHandler {
 	fn handle_event(&self, event: &Event);
 }
 
-impl<F> EventHandler for F where F: Fn(&Event) {
+impl<F> EventHandler for F
+where
+	F: Fn(&Event),
+{
 	fn handle_event(&self, event: &Event) {
 		self(event)
 	}
