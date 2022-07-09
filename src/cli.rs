@@ -203,7 +203,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 	keys_manager: Arc<KeysManager>, inbound_payments: PaymentInfoStorage,
 	outbound_payments: PaymentInfoStorage, pending_payments: PaymentInfoStorage,
 	ldk_data_dir: String, network: Network, network_graph: Arc<NetworkGraph>,
-	logger: Arc<FilesystemLogger>, _scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
+	logger: Arc<FilesystemLogger>, scorer: Arc<Mutex<ProbabilisticScorer<Arc<NetworkGraph>>>>,
 	db: Arc<Mutex<rusqlite::Connection>>,
 ) {
 	println!("LDK startup successful. To view available commands: \"help\".");
@@ -453,6 +453,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						&logger,
 						ldk_data_dir.clone(),
 						vec![],
+						&scorer,
 					);
 
 					if let Ok(route) = route {
@@ -476,6 +477,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						&logger,
 						ldk_data_dir.clone(),
 						vec![],
+						&scorer,
 					);
 
 					let fake_preimage = rand::thread_rng().gen::<[u8; 32]>();
@@ -535,6 +537,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 						&logger,
 						&ldk_data_dir,
 						pending_payments.clone(),
+						&scorer,
 					) {
 						Ok(_) => continue,
 						Err(_) => continue,
@@ -644,6 +647,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 							&logger,
 							ldk_data_dir.clone(),
 							vec![],
+							&scorer,
 						);
 
 						match route {
@@ -746,6 +750,7 @@ pub(crate) async fn poll_for_user_input<E: EventHandler>(
 									&logger,
 									&ldk_data_dir,
 									pending_payments.clone(),
+									&scorer,
 								) {
 									Ok(_) => break,
 									Err(_) => {
