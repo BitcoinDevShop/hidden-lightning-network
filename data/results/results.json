@@ -5110,5 +5110,23 @@
     "amount": 2000000,
     "block_open": 704408,
     "date_found": "2022-07-09T00:36:48.977609519"
+  },
+  {
+    "target_pubkey": "0219f7476ffcbc26dd6f746e8a44ea938cc12be8590b06b3794dac6f3f6a4aaea2",
+    "other_pubkey": "",
+    "channel_id": "817811251312132096",
+    "transaction_id_output": "e364a9fa2e82e6c5cbe7460ace50772cca65c74e80b1f33ea6fac141d8541f25:0",
+    "amount": 2099569,
+    "block_open": 743795,
+    "date_found": "2022-07-10T01:21:51.829304539"
+  },
+  {
+    "target_pubkey": "0219f7476ffcbc26dd6f746e8a44ea938cc12be8590b06b3794dac6f3f6a4aaea2",
+    "other_pubkey": "",
+    "channel_id": "816695246905868288",
+    "transaction_id_output": "ce15b5a44df2fa5bd5c2a135f6dea2047f4f6949c9d74dde7a0ee04fb0613412:0",
+    "amount": 999651,
+    "block_open": 742780,
+    "date_found": "2022-07-10T07:37:24.659919143"
   }
 ]

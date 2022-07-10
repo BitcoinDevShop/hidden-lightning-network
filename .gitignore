@@ -16,3 +16,6 @@ my_db.db3
 # These are raw block/tx files to ignore
 data/iterate.txt
 data/utxodump.csv
+
+# temp nodes to probe
+data/nodes-mainnet.json
