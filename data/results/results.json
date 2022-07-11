@@ -5128,5 +5128,14 @@
     "amount": 999651,
     "block_open": 742780,
     "date_found": "2022-07-10T07:37:24.659919143"
+  },
+  {
+    "target_pubkey": "0219f7476ffcbc26dd6f746e8a44ea938cc12be8590b06b3794dac6f3f6a4aaea2",
+    "other_pubkey": "",
+    "channel_id": "810188337151016960",
+    "transaction_id_output": "872d507de4abf035a727c4f3f037a198ac1259170f74e303a001eaafbad562df:0",
+    "amount": 1000000,
+    "block_open": 736862,
+    "date_found": "2022-07-11T10:11:10.437162773"
   }
 ]
