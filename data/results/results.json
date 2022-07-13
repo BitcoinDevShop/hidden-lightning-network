@@ -5137,5 +5137,509 @@
     "amount": 1000000,
     "block_open": 736862,
     "date_found": "2022-07-11T10:11:10.437162773"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "817788161460994048",
+    "transaction_id_output": "5083685aa30f328ffebf86f4fe11b836fa3a4dc6a0f34f1e2d4856c257a2b8a9:0",
+    "amount": 800000,
+    "block_open": 743774,
+    "date_found": "2022-07-13T17:29:17.252542470"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "817561662100340737",
+    "transaction_id_output": "9a8c524f8fd7b919c96a737028e8034ac3bd1aed04015fe66e4324965b68c594:1",
+    "amount": 5000000,
+    "block_open": 743568,
+    "date_found": "2022-07-13T17:29:38.569941205"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "817494592028213248",
+    "transaction_id_output": "61cdce943538a93a3ec3e5bea129bfc5de0971493c8753c939e1c4f8dc8090e0:0",
+    "amount": 400000,
+    "block_open": 743507,
+    "date_found": "2022-07-13T17:29:42.358605781"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "812443435601428481",
+    "transaction_id_output": "bfed403913d07f34c908420b1464abdf9d1594a19bc1702ec285a05240bd0262:1",
+    "amount": 1000000,
+    "block_open": 738913,
+    "date_found": "2022-07-13T17:31:58.766568355"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "810846944604782593",
+    "transaction_id_output": "b0d7629e59326a0340db6f297211e9bab50955c4e8fa5f780fa8247c0778fafa:1",
+    "amount": 1000000,
+    "block_open": 737461,
+    "date_found": "2022-07-13T17:32:06.679120133"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "806583038490771456",
+    "transaction_id_output": "b0160598ca226558406b6bd8298310b4d15d1183a0ea9cd8def810f3c1f9af6d:0",
+    "amount": 400000,
+    "block_open": 733583,
+    "date_found": "2022-07-13T17:32:28.526889962"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "805375774694637568",
+    "transaction_id_output": "091d782eb1c5f2595b407d390ecfe6f9ac0d9ac3577583600378dcf31f98fbdf:0",
+    "amount": 2600000,
+    "block_open": 732485,
+    "date_found": "2022-07-13T17:32:33.032101249"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "805011836370288641",
+    "transaction_id_output": "e9b2b19cdb614ce5059b9a10b4f427be306f7d3a94a00637c2dc7ea5a851012d:1",
+    "amount": 1100000,
+    "block_open": 732154,
+    "date_found": "2022-07-13T17:32:42.124689371"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "800965633586298880",
+    "transaction_id_output": "e67d5693d6f4599f0c7ad60795803104d851ee30803dd2085cdb1363c24fbc14:0",
+    "amount": 5000000,
+    "block_open": 728474,
+    "date_found": "2022-07-13T17:32:57.028294600"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "795723162185826305",
+    "transaction_id_output": "a466f6808ec5becb46aa2b8c916651d7d4fac9d2c906ebbe9c50e4e082cdab6f:1",
+    "amount": 950000,
+    "block_open": 723706,
+    "date_found": "2022-07-13T17:33:03.029603815"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "788439997136502784",
+    "transaction_id_output": "d9d7afe0745c2011d082829884a5232bd8afe6c954ffd89df0839c084e68bfa6:0",
+    "amount": 2000000,
+    "block_open": 717082,
+    "date_found": "2022-07-13T17:33:11.934245029"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "788439997174841345",
+    "transaction_id_output": "1d51e0d3706cf6bd104604685d2c6fadf8aa52f36ae28b057562d993a89f779a:1",
+    "amount": 2000000,
+    "block_open": 717082,
+    "date_found": "2022-07-13T17:33:12.377010694"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "788284966011469824",
+    "transaction_id_output": "e7e95a4730a62b964d2b200b4d75800d0b0bf931aa70dd7a6eeefa05cfb7d0fa:0",
+    "amount": 500000,
+    "block_open": 716941,
+    "date_found": "2022-07-13T17:33:14.161390334"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "788250881141637120",
+    "transaction_id_output": "e2e928f0f05d0b2757de4ddf3b92db9fbe8c224931a1c5931e2b0ee7b689e723:0",
+    "amount": 450000,
+    "block_open": 716910,
+    "date_found": "2022-07-13T17:33:15.199264646"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "782854478107049985",
+    "transaction_id_output": "e3704a2eb1dd6adab5eff0e34c0fe2466d2ffde03a43d34980888ff20debe94d:1",
+    "amount": 600000,
+    "block_open": 712002,
+    "date_found": "2022-07-13T17:33:20.428989094"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "781995759535915009",
+    "transaction_id_output": "b05545574eb7465bee00a585c61b7a47cf1d08df9588d7cdaa76bb5ee7890985:1",
+    "amount": 2600000,
+    "block_open": 711221,
+    "date_found": "2022-07-13T17:33:27.152512966"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "781506476800606208",
+    "transaction_id_output": "ed9ad91d89af940b591c988b7b89c64a6bfe6014f3d2445bfa44611e135e73f9:0",
+    "amount": 500000,
+    "block_open": 710776,
+    "date_found": "2022-07-13T17:33:30.509403134"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "780808286995611648",
+    "transaction_id_output": "8b2d73639add1374a1f95c6bc527e2171f5822371411690b9d04fce015869247:0",
+    "amount": 400000,
+    "block_open": 710141,
+    "date_found": "2022-07-13T17:33:30.674842132"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "776561973059846144",
+    "transaction_id_output": "e521340a3ef448dcb33c3e0bfdb80a5bf4067088a491bacbc904f5a10d082543:0",
+    "amount": 400000,
+    "block_open": 706279,
+    "date_found": "2022-07-13T17:33:32.939206103"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "775785717873311744",
+    "transaction_id_output": "f062e1180344b5deea94cbdb598be8554cfff85612a4bbd0d33f4fa6a8d46d71:0",
+    "amount": 500000,
+    "block_open": 705573,
+    "date_found": "2022-07-13T17:33:34.403661730"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "774570757462294529",
+    "transaction_id_output": "9aa4575850edfe2cb50be68c330dce8d7d96734a6f2a3f209aacdbe29dfdc1df:1",
+    "amount": 500000,
+    "block_open": 704468,
+    "date_found": "2022-07-13T17:33:50.657045265"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "774050688505610241",
+    "transaction_id_output": "0b7ef97b236ca7bcd58fd1b1d60e7a0de2f83db0a0b48c62b9be818c7748c561:1",
+    "amount": 3500000,
+    "block_open": 703995,
+    "date_found": "2022-07-13T17:34:00.608083335"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "772775254935535617",
+    "transaction_id_output": "124ef6eeec4b6bd902b28cd849de278493b86e08bec29d73a59550506f66d489:1",
+    "amount": 2000000,
+    "block_open": 702835,
+    "date_found": "2022-07-13T17:34:06.973893396"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "771739515007860736",
+    "transaction_id_output": "1857dcaf0e0f84b45d2a871f12f40c07fbe03d3217725c90f4e71cff4b479321:0",
+    "amount": 6000000,
+    "block_open": 701893,
+    "date_found": "2022-07-13T17:34:08.058699339"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "771047922184945665",
+    "transaction_id_output": "0a1ac4e7b69618bc0b0914c8ed59933e62cccc809b99ef796792d7c129cf024f:1",
+    "amount": 1000000,
+    "block_open": 701264,
+    "date_found": "2022-07-13T17:34:09.459459617"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "770889592568741888",
+    "transaction_id_output": "7092a273e95f1eb975de2d394a8fe21d37e8024a7072fdc86a76fa50d774a2e7:0",
+    "amount": 500000,
+    "block_open": 701120,
+    "date_found": "2022-07-13T17:34:09.752566985"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "770659794589057024",
+    "transaction_id_output": "af23fc8526a06e9b1636c4a11e7ca4a35f3aae197ca6f29253ee830fa2e001d4:0",
+    "amount": 1000000,
+    "block_open": 700911,
+    "date_found": "2022-07-13T17:34:10.444840185"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "769895634053234689",
+    "transaction_id_output": "863dc71c249989dda513c6431f201b9a77867c10abfc59f1ad4ff51cee21557e:1",
+    "amount": 550000,
+    "block_open": 700216,
+    "date_found": "2022-07-13T17:34:12.112998305"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "765582249889234945",
+    "transaction_id_output": "4b1523d30a98519c46507dd881388635bae4d4a99b579972c29da8b9afb3ebc6:1",
+    "amount": 400000,
+    "block_open": 696293,
+    "date_found": "2022-07-13T17:34:16.855070173"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "765410726075367425",
+    "transaction_id_output": "e90cd00ce6c4d90cdf62d78b03ad38a27807c9f0364a8634db19642a0c0d944b:1",
+    "amount": 1100000,
+    "block_open": 696137,
+    "date_found": "2022-07-13T17:34:16.934240249"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "765020399568879617",
+    "transaction_id_output": "2f6ad931f6f35dddc58df9af6076cffc5c86da0978ed241d43baf657e5cbabc3:1",
+    "amount": 2000000,
+    "block_open": 695782,
+    "date_found": "2022-07-13T17:34:17.345758131"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "764875263975620609",
+    "transaction_id_output": "6c95bec600e4cd2d82230ba722ff0370ab3caa9ec9cb47d02a80059c7fa95d4a:1",
+    "amount": 400000,
+    "block_open": 695650,
+    "date_found": "2022-07-13T17:34:17.988706789"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "764633371376025601",
+    "transaction_id_output": "27c133d4df634b1a718d9becb5878b454870b1893096b231269e1a85bc7e91d8:1",
+    "amount": 500000,
+    "block_open": 695430,
+    "date_found": "2022-07-13T17:34:19.423768541"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "764470643657670657",
+    "transaction_id_output": "3135b2647cfe3139240e9e36adfff8e74b0108ec91581a1d88e416ba21fdc3a6:1",
+    "amount": 2000000,
+    "block_open": 695282,
+    "date_found": "2022-07-13T17:34:20.253013155"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "764234248674607105",
+    "transaction_id_output": "30c40303cbd5806be27e4ba6bc1e7a1ea63352b2713214fcdec4bc0b39d0c381:1",
+    "amount": 500000,
+    "block_open": 695067,
+    "date_found": "2022-07-13T17:34:20.846603523"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "764225452599541761",
+    "transaction_id_output": "8cbe2947921c86ecdc709eebf4dbf977e969dd027e820a7768b9928a43922357:1",
+    "amount": 1000000,
+    "block_open": 695059,
+    "date_found": "2022-07-13T17:34:20.867258273"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "761033570361081857",
+    "transaction_id_output": "838656637e491337a5d738b7a1b153d2d3e8ae234d3161443ddfc482c1549356:1",
+    "amount": 500000,
+    "block_open": 692156,
+    "date_found": "2022-07-13T17:34:22.658824539"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "756836734457479169",
+    "transaction_id_output": "1a1a6e9bf52f259c708fa9dced137fd0f1f6b03382d0370f40e88f8dc310fe47:1",
+    "amount": 5000000,
+    "block_open": 688339,
+    "date_found": "2022-07-13T17:34:26.577076965"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "753046717855432704",
+    "transaction_id_output": "9dfb49d02bde30ef0035d42738e4524902a397522bc85d29b5c7c4749d74b450:0",
+    "amount": 500000,
+    "block_open": 684892,
+    "date_found": "2022-07-13T17:34:29.547206297"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "752988443781824513",
+    "transaction_id_output": "5e2f1e58d128ac558861c55c40491ea304bd0c8e76f065982d2168dfca90c67a:1",
+    "amount": 600000,
+    "block_open": 684839,
+    "date_found": "2022-07-13T17:34:29.630356243"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "751993385717334016",
+    "transaction_id_output": "aa77ff44da7d308eb72ea02c40f054cf5d97c1384ef8ff3132c6184561bc9b46:0",
+    "amount": 1000000,
+    "block_open": 683934,
+    "date_found": "2022-07-13T17:34:30.583460686"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "747484288588644352",
+    "transaction_id_output": "c9afc3f31962071fce90a3b0197509d3dd7b765b02edd3564caa93a37aded734:0",
+    "amount": 400000,
+    "block_open": 679833,
+    "date_found": "2022-07-13T17:34:44.758421412"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "745739363510321152",
+    "transaction_id_output": "cd4ac21bba96a2e95a3a1d03228ed795905ea8c9f30a7c69d584e2d9dfce1587:0",
+    "amount": 3000000,
+    "block_open": 678246,
+    "date_found": "2022-07-13T17:34:45.456019591"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "743471071121375232",
+    "transaction_id_output": "baa4fb65d784366d66c4888c35d0b4076963900b701bda6ba894b9e924777498:0",
+    "amount": 400000,
+    "block_open": 676183,
+    "date_found": "2022-07-13T17:34:46.376361061"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "740533176031838208",
+    "transaction_id_output": "e621ccb0b32d940dbc33b5b7ff5dfc6b294966fe90ab5e41dd9ca359285931f7:0",
+    "amount": 490000,
+    "block_open": 673511,
+    "date_found": "2022-07-13T17:34:48.370258235"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "737132386544058369",
+    "transaction_id_output": "6cdbe774a89fefbcc59b84812686cb2b0e40751b7bf4601a51e961f0c282d407:1",
+    "amount": 300000,
+    "block_open": 670418,
+    "date_found": "2022-07-13T17:34:53.644310146"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "726953107891945472",
+    "transaction_id_output": "8c3a93cede9e62fd2469521600cc00bc100e929334dc6db66e3a49651a265e78:0",
+    "amount": 5000000,
+    "block_open": 661160,
+    "date_found": "2022-07-13T17:34:57.153465020"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "724796965646303232",
+    "transaction_id_output": "8de4f89988d935012e8e6b03eb5aa87d84863fd9153cbde1d9314bdfe6e2d4ca:0",
+    "amount": 5000000,
+    "block_open": 659199,
+    "date_found": "2022-07-13T17:34:57.703074527"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "724614446626832385",
+    "transaction_id_output": "b54eacd6dcff63ea5277f7e1d0ecb0c128f309f001670ad0e8e61c8257331731:1",
+    "amount": 2500000,
+    "block_open": 659033,
+    "date_found": "2022-07-13T17:34:58.124045551"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "723531427780493313",
+    "transaction_id_output": "7366a77df620d06f4ca8421ca623091acf6f6a7c68b9bb9593d395f0c21d6568:1",
+    "amount": 1000000,
+    "block_open": 658048,
+    "date_found": "2022-07-13T17:34:58.153190103"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "721333503902875649",
+    "transaction_id_output": "98ec245b292ed8859c6d7493fa0ab19db7f42a47c6480796e5cb441f7a8e5293:1",
+    "amount": 200000,
+    "block_open": 656049,
+    "date_found": "2022-07-13T17:34:59.158470172"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "716932158877728769",
+    "transaction_id_output": "52cc7380d6267872c6ad1d507b86bd398211067c1176c30859bf4cac30cbdb41:1",
+    "amount": 1000000,
+    "block_open": 652046,
+    "date_found": "2022-07-13T17:35:00.081485841"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "706703402260692993",
+    "transaction_id_output": "7d94e42855ca1d721c49c8ecf2de9027cde205a146701a6b1336016745d3a8e6:1",
+    "amount": 100000,
+    "block_open": 642743,
+    "date_found": "2022-07-13T17:35:02.043512312"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "699727001009061889",
+    "transaction_id_output": "f389da96cd16ac936b32fd1cd528e36cb2c1e21fc7538789706226a2a2b0b3f1:1",
+    "amount": 500000,
+    "block_open": 636398,
+    "date_found": "2022-07-13T17:35:02.065154109"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "684652696572133376",
+    "transaction_id_output": "03f5b7f75640105b936a80495a8bb8240c9f60f1f69ac41c241fd418f051162e:0",
+    "amount": 220000,
+    "block_open": 622688,
+    "date_found": "2022-07-13T17:35:02.773801696"
+  },
+  {
+    "target_pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+    "other_pubkey": "",
+    "channel_id": "666353524586905600",
+    "transaction_id_output": "50dab70b1bb18a498125ba3c6f290ff65603990bba748f3c94d7b31cc898c4dc:0",
+    "amount": 100000,
+    "block_open": 606045,
+    "date_found": "2022-07-13T17:35:03.255610074"
   }
 ]
