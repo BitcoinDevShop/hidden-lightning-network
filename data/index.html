@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+            .border {
+                padding: 5px;
+                border: 2px solid #52595d;
+            }
+
+            p,
+            h1,
+            h2,
+            h3 {
+                color: white;
+            }
+
+            body {
+                background-color: #0c090a;
+            }
+
+            a:link,
+            a:visited {
+                color: orange;
+                background-color: transparent;
+                text-decoration: none;
+                font-weight: bold;
+            }
+
+            a:hover,
+            a:active {
+                color: rgb(230, 108, 25);
+                background-color: transparent;
+                text-decoration: underline;
+            }
+
+            table {
+                border: 2px solid #52595d;
+                border-collapse: collapse;
+                padding: 4px;
+                color: white;
+                font-size: medium;
+            }
+
+            th,
+            td {
+                border: 1px solid #52595d;
+                border-collapse: collapse;
+                padding: 4px;
+            }
+
+            table.center {
+                margin-left: auto;
+                margin-right: auto;
+            }
+        </style>
+        <title>Hidden Lightning Network Stats</title>
+    </head>
+    <body>
+        <div class="border">
+            <center>
+                <h1>Hidden Lightning Network Stats</h1>
+            </center>
+        </div>
+        <br />
+        <div>
+            <div>
+                <br>
+                <font color="orange"><b>Search:</b></font> <input style="width: 500px; height: 30px" type="text" id="searchInput" onkeyup="searchFunction()" placeholder="search target pubkey, channel id, amount, etc" title="Search">
+            </div>
+
+            <br><br>
+            <div>
+                <table id="searchableTable" class="center">
+                    <thead>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            <div id="notFoundmsg" style="display: none; color: white">
+                <p>
+                    <center>No such data.</center>
+                </p>
+            </div>
+            <br>
+    </body>
+    <script>
+        window.addEventListener("DOMContentLoaded", () => {
+            fetch(
+                    "https://raw.githubusercontent.com/BitcoinDevShop/hidden-lightning-network/master/data/results/results.json"
+                )
+                .then((response) => response.json())
+                .then((data) => {
+                    appendData(data);
+                });
+
+            function appendData(data) {
+                const thead = document.querySelector("#searchableTable thead");
+                const tbody = document.querySelector("#searchableTable tbody");
+
+                thead.innerHTML = `<tr>
+    ${Object.keys(data[0])
+      .map((key) => `<th>${key}</th>`)
+      .join("")}
+     </tr>`;
+
+                tbody.innerHTML = data
+                    .map(
+                        (item) => `<tr>
+        ${Object.values(item)
+          .map((val) => `<td>${val}</td>`)
+          .join("")}
+        </tr>`
+                    )
+                    .join("");
+            }
+        });
+
+        function searchFunction() {
+            let input = document.getElementById("searchInput"),
+                filter = input.value.toUpperCase(),
+                table = document.getElementById("searchableTable"),
+                trs = table.tBodies[0].getElementsByTagName("tr"),
+                foundSomething = false;
+
+            for (let i = 0; i < trs.length; i++) {
+                const tds = trs[i].getElementsByTagName("td");
+                trs[i].style.display = "none";
+
+                for (let i2 = 0; i2 < tds.length; i2++) {
+                    if (tds[i2].innerHTML.toUpperCase().indexOf(filter) > -1) {
+                        trs[i].style.display = "";
+                        foundSomething = true;
+                        continue;
+                    }
+                }
+            }
+
+            if (!foundSomething) {
+                document.getElementById("notFoundmsg").style.display = "";
+            } else {
+                document.getElementById("notFoundmsg").style.display = "none";
+            }
+        }
+    </script>
+</html>
