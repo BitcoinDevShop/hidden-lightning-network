@@ -41,7 +41,7 @@
                 border-collapse: collapse;
                 padding: 4px;
                 color: white;
-                font-size: small;
+                font-size: normal;
             }
 
             th,
@@ -67,8 +67,8 @@
         <br />
         <div>
             <div class="border">
-                <font color="orange"><center><b>Totals</b></center></font>
-                <br><font color="orange">Amount:  </font><span id="totalAmount" style="color: white"> </span>
+                <font color="orange"><center><b>Stats</b></center></font>
+                <br><font color="orange">Amount (total):  </font><span id="totalAmount" style="color: white"> </span>
                 <br><font color="orange">Count:  </font><span id="entryCount" style="color: white"</span>
             </div>
             <div>
@@ -99,17 +99,13 @@
             </div>
     </body>
     <script>
-        window.addEventListener("DOMContentLoaded", () => {
+        function getDataFillTable() {
             fetch(
                     "https://raw.githubusercontent.com/BitcoinDevShop/hidden-lightning-network/master/data/results/results.json"
                 )
                 .then((response) => response.json())
                 .then((data) => {
                     appendData(data);            
-                                    
-                    document.getElementById("entryCount").innerHTML = data.length;
-                    const totalAmount = data.map(data => data.amount).reduce((acc, amount) => acc + amount);
-                    document.getElementById("totalAmount").innerHTML = totalAmount;
                 });
 
             function appendData(data) {
@@ -131,9 +127,40 @@
         </tr>`
                     )
                     .join("");
+                
+                    updateTotals()
             }
-        });
+        };
 
+        function updateTotals() {
+            const table = document.getElementById("searchableTable");
+
+            function countRows() {
+                let rowCount = 0;
+                const rows = table.getElementsByTagName("tr")
+                for (let i = 0; i < rows.length; i++) {
+                    if (rows[i].style.display == 'none') continue;
+                    if (rows[i].getElementsByTagName("td").length > 0) {
+                    rowCount++;
+                    }
+                }
+                document.getElementById("entryCount").innerHTML = rowCount;
+            }
+
+            function sumAmount() {
+                let sumVal = 0;
+                for(let i = 1; i < table.rows.length; i++){
+                    const row = table.rows[i];
+                    if(row.style.display !== 'none')
+                    sumVal = sumVal + parseFloat(row.cells[4].innerHTML);
+                }
+                document.getElementById("totalAmount").innerHTML = sumVal;
+            }
+            
+            countRows();
+            sumAmount();
+        }
+        
         function searchFunction() {
             let input = document.getElementById("searchInput"),
                 filter = input.value.toUpperCase(),
@@ -159,6 +186,10 @@
             } else {
                 document.getElementById("notFoundmsg").style.display = "none";
             }
+            
+            updateTotals()
         }
+        
+        getDataFillTable();
     </script>
 </html>
